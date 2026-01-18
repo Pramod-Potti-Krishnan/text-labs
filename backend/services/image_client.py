@@ -170,8 +170,10 @@ class ImageClient:
                 image_url = data.get("image_url")
                 element_id = data.get("element_id")
 
-                # Build HTML wrapper for the image
-                html = self._build_image_html(image_url, element_id, grid_row, grid_column)
+                # Use HTML from service response if available, otherwise build locally (backward compat)
+                html = data.get("html")
+                if not html:
+                    html = self._build_image_html(image_url, element_id, grid_row, grid_column)
 
                 logger.info(f"[ImageClient] Successfully generated image: {element_id}")
 
@@ -237,7 +239,7 @@ class ImageClient:
             "display: block"
         ]
 
-        return f'''<div class="image-element" data-element-id="{element_id}" style="width: 100%; height: 100%; position: relative; overflow: hidden;">
+        return f'''<div class="image-element" data-element-id="{element_id}" style="width: 100%; height: 100%; padding: 10px; box-sizing: border-box; position: relative; overflow: hidden;">
     <img
         src="{image_url}"
         alt="AI-generated image"
