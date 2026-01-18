@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text Labs - Atomic API Tester</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/modal.css">
+    <link rel="stylesheet" href="css/canvas.css">
+</head>
+<body>
+    <!-- Header -->
+    <header id="app-header">
+        <div class="header-left">
+            <h1>Text Labs</h1>
+            <span class="subtitle">Atomic API Tester</span>
+        </div>
+        <div class="header-right">
+            <span class="session-label">Session:</span>
+            <span id="session-id" class="session-value">loading...</span>
+        </div>
+    </header>
+
+    <!-- Main Layout -->
+    <main id="app-main">
+        <!-- Left Panel: Controls -->
+        <aside id="controls-panel">
+            <!-- Mode Tabs -->
+            <div id="mode-tabs">
+                <button data-mode="chat" class="tab-btn active">Chat Mode</button>
+                <button data-mode="toolbar" class="tab-btn">Toolbar Mode</button>
+            </div>
+
+            <!-- Chat Mode Panel -->
+            <section id="chat-mode" class="mode-panel active">
+                <div id="chat-messages">
+                    <div class="chat-message assistant">
+                        Welcome! Tell me what elements you want to add. Try: "Add 3 metrics about revenue growth"
+                    </div>
+                </div>
+                <div id="chat-input-container">
+                    <textarea id="chat-input" placeholder="e.g., Add 3 metrics about Q4 revenue..." rows="2"></textarea>
+                    <button id="chat-send" class="primary-btn">Send</button>
+                </div>
+                <div id="suggestions-bar"></div>
+            </section>
+
+            <!-- Toolbar Mode Panel -->
+            <section id="toolbar-mode" class="mode-panel">
+                <p class="toolbar-hint">Choose a component type:</p>
+                <div id="atomic-toolbar">
+                    <button data-type="METRICS" class="atomic-btn metrics">
+                        <span class="btn-icon">📊</span>
+                        <span class="btn-label">Metrics</span>
+                        <span class="btn-desc">Number-focused KPI cards</span>
+                    </button>
+                    <button data-type="TABLE" class="atomic-btn table">
+                        <span class="btn-icon">▦</span>
+                        <span class="btn-label">Table</span>
+                        <span class="btn-desc">Grid-based data table</span>
+                    </button>
+                    <button data-type="TEXT_BOX" class="atomic-btn text-box">
+                        <span class="btn-icon">📝</span>
+                        <span class="btn-label">Text Box</span>
+                        <span class="btn-desc">Configurable text boxes</span>
+                    </button>
+                    <button data-type="CHART" class="atomic-btn chart">
+                        <span class="btn-icon">📈</span>
+                        <span class="btn-label">Chart</span>
+                        <span class="btn-desc">Data visualizations</span>
+                    </button>
+                    <button data-type="IMAGE" class="atomic-btn image">
+                        <span class="btn-icon">🖼️</span>
+                        <span class="btn-label">Image</span>
+                        <span class="btn-desc">AI-generated visuals</span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Canvas Controls -->
+            <section id="canvas-controls">
+                <button id="clear-canvas" class="control-btn danger">
+                    <span>🗑️</span> Clear Canvas
+                </button>
+                <button id="toggle-grid" class="control-btn">
+                    <span>⊞</span> Toggle Grid
+                </button>
+                <button id="hide-content-slot" class="control-btn">
+                    <span>👁️</span> Hide Content Slot
+                </button>
+                <button id="generate-all" class="control-btn primary">
+                    <span>✨</span> Generate AI Content
+                </button>
+            </section>
+        </aside>
+
+        <!-- Right Panel: Canvas Preview -->
+        <div id="canvas-panel">
+            <div id="canvas-container">
+                <div id="canvas-wrapper">
+                    <iframe id="layout-viewer" src="about:blank"></iframe>
+                    <div id="grid-overlay" class="hidden"></div>
+                    <div id="canvas-placeholder">
+                        <p>Canvas Preview</p>
+                        <p class="small">Elements will appear here</p>
+                    </div>
+                </div>
+            </div>
+            <div id="element-info-bar">
+                <span id="element-count">Elements: 0</span>
+                <span id="canvas-size">1920×1080 @ 50%</span>
+                <span id="connection-status" class="status-dot"></span>
+            </div>
+        </div>
+    </main>
+
+    <!-- Atomic Configuration Modal -->
+    <div id="atomic-modal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">Configure Component</h2>
+                <button id="modal-close" class="close-btn">&times;</button>
+            </div>
+            <form id="atomic-form">
+                <div class="form-group">
+                    <label for="count-select">Instance Count</label>
+                    <select id="count-select" required></select>
+                </div>
+                <!-- General layout dropdown (hidden for TEXT_BOX - uses toggle instead) -->
+                <div class="form-group" id="layout-dropdown-group">
+                    <label for="layout-select">Layout</label>
+                    <select id="layout-select">
+                        <option value="horizontal">Horizontal (side by side)</option>
+                        <option value="vertical">Vertical (stacked)</option>
+                    </select>
+                </div>
+                <div class="form-group" id="items-group">
+                    <label for="items-select">Items per Instance</label>
+                    <select id="items-select"></select>
+                </div>
+                <div class="form-group" id="table-config" style="display: none;">
+                    <div class="form-row">
+                        <div class="form-col">
+                            <label for="cols-select">Columns</label>
+                            <select id="cols-select"></select>
+                        </div>
+                        <div class="form-col">
+                            <label for="rows-select">Rows</label>
+                            <select id="rows-select"></select>
+                        </div>
+                    </div>
+                </div>
+                <!-- METRICS Configuration -->
+                <div id="metrics-config" style="display: none;">
+                    <div class="form-group">
+                        <label>Metrics Styling</label>
+                        <div class="toggle-group">
+                            <div class="toggle-row">
+                                <span class="toggle-label">Corners</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn active" data-field="metrics_corners" data-value="rounded">Rounded</button>
+                                    <button type="button" class="toggle-btn" data-field="metrics_corners" data-value="square">Square</button>
+                                </div>
+                            </div>
+                            <div class="toggle-row">
+                                <span class="toggle-label">Border</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn" data-field="metrics_border" data-value="true">Show</button>
+                                    <button type="button" class="toggle-btn active" data-field="metrics_border" data-value="false">Hide</button>
+                                </div>
+                            </div>
+                            <div class="toggle-row">
+                                <span class="toggle-label">Alignment</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn" data-field="metrics_alignment" data-value="left">Left</button>
+                                    <button type="button" class="toggle-btn active" data-field="metrics_alignment" data-value="center">Center</button>
+                                    <button type="button" class="toggle-btn" data-field="metrics_alignment" data-value="right">Right</button>
+                                </div>
+                            </div>
+                            <div class="toggle-row">
+                                <span class="toggle-label">Color Scheme</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn active" data-field="metrics_color_scheme" data-value="gradient">Gradient</button>
+                                    <button type="button" class="toggle-btn" data-field="metrics_color_scheme" data-value="solid">Solid</button>
+                                    <button type="button" class="toggle-btn" data-field="metrics_color_scheme" data-value="accent">Pastel</button>
+                                </div>
+                            </div>
+                            <div class="toggle-row">
+                                <span class="toggle-label">Color</span>
+                                <div class="toggle-options">
+                                    <select id="metrics-color-variant-select" class="form-select">
+                                        <option value="">Auto (theme-based)</option>
+                                        <option value="purple" style="background:#7c3aed;color:#fff;">Purple</option>
+                                        <option value="blue" style="background:#2563eb;color:#fff;">Blue</option>
+                                        <option value="green" style="background:#059669;color:#fff;">Green</option>
+                                        <option value="red" style="background:#dc2626;color:#fff;">Red</option>
+                                        <option value="cyan" style="background:#06b6d4;color:#fff;">Cyan</option>
+                                        <option value="orange" style="background:#ea580c;color:#fff;">Orange</option>
+                                        <option value="pink" style="background:#db2777;color:#fff;">Pink</option>
+                                        <option value="yellow" style="background:#eab308;color:#fff;">Yellow</option>
+                                        <option value="teal" style="background:#14b8a6;color:#fff;">Teal</option>
+                                        <option value="indigo" style="background:#6366f1;color:#fff;">Indigo</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="toggle-row">
+                                <span class="toggle-label">Layout</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn active" data-field="metrics_layout" data-value="horizontal">↔ Horiz</button>
+                                    <button type="button" class="toggle-btn" data-field="metrics_layout" data-value="vertical">↕ Vert</button>
+                                    <button type="button" class="toggle-btn" data-field="metrics_layout" data-value="grid">⊞ Grid</button>
+                                </div>
+                            </div>
+                            <div class="toggle-row">
+                                <span class="toggle-label">Content Source</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn active" data-field="metrics_placeholder_mode" data-value="false">✨ AI Generated</button>
+                                    <button type="button" class="toggle-btn" data-field="metrics_placeholder_mode" data-value="true">📝 Lorem Ipsum</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- TABLE Styling Configuration -->
+                <div id="table-styling-config" style="display: none;">
+                    <div class="form-group">
+                        <label>Table Styling</label>
+                        <div class="toggle-group">
+                            <div class="toggle-row">
+                                <span class="toggle-label">Row Stripes</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn active" data-field="table_stripe_rows" data-value="true">On</button>
+                                    <button type="button" class="toggle-btn" data-field="table_stripe_rows" data-value="false">Off</button>
+                                </div>
+                            </div>
+                            <div class="toggle-row">
+                                <span class="toggle-label">Corners</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn" data-field="table_corners" data-value="rounded">Rounded</button>
+                                    <button type="button" class="toggle-btn active" data-field="table_corners" data-value="square">Square</button>
+                                </div>
+                            </div>
+                            <div class="toggle-row">
+                                <span class="toggle-label">Header Style</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn active" data-field="table_header_style" data-value="solid">Solid</button>
+                                    <button type="button" class="toggle-btn" data-field="table_header_style" data-value="pastel">Pastel</button>
+                                    <button type="button" class="toggle-btn" data-field="table_header_style" data-value="minimal">Minimal</button>
+                                </div>
+                            </div>
+                            <div class="toggle-row">
+                                <span class="toggle-label">Header Color</span>
+                                <div class="toggle-options">
+                                    <select id="table-header-color-select" class="form-select">
+                                        <option value="">Auto (theme-based)</option>
+                                        <option value="purple" style="background:#7c3aed;color:#fff;">Purple</option>
+                                        <option value="blue" style="background:#2563eb;color:#fff;">Blue</option>
+                                        <option value="green" style="background:#059669;color:#fff;">Green</option>
+                                        <option value="red" style="background:#dc2626;color:#fff;">Red</option>
+                                        <option value="cyan" style="background:#06b6d4;color:#fff;">Cyan</option>
+                                        <option value="orange" style="background:#ea580c;color:#fff;">Orange</option>
+                                        <option value="pink" style="background:#db2777;color:#fff;">Pink</option>
+                                        <option value="yellow" style="background:#eab308;color:#fff;">Yellow</option>
+                                        <option value="teal" style="background:#14b8a6;color:#fff;">Teal</option>
+                                        <option value="indigo" style="background:#6366f1;color:#fff;">Indigo</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="toggle-row">
+                                <span class="toggle-label">Alignment</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn active" data-field="table_alignment" data-value="left">Left</button>
+                                    <button type="button" class="toggle-btn" data-field="table_alignment" data-value="center">Center</button>
+                                    <button type="button" class="toggle-btn" data-field="table_alignment" data-value="right">Right</button>
+                                </div>
+                            </div>
+                            <div class="toggle-row">
+                                <span class="toggle-label">Borders</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn active" data-field="table_border_style" data-value="light">Light</button>
+                                    <button type="button" class="toggle-btn" data-field="table_border_style" data-value="medium">Medium</button>
+                                    <button type="button" class="toggle-btn" data-field="table_border_style" data-value="heavy">Heavy</button>
+                                    <button type="button" class="toggle-btn" data-field="table_border_style" data-value="none">None</button>
+                                </div>
+                            </div>
+                            <div class="toggle-row">
+                                <span class="toggle-label">Layout</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn active" data-field="table_layout" data-value="horizontal">↔ Horiz</button>
+                                    <button type="button" class="toggle-btn" data-field="table_layout" data-value="vertical">↕ Vert</button>
+                                </div>
+                            </div>
+                            <div class="toggle-row">
+                                <span class="toggle-label">First Col Bold</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn" data-field="table_first_column_bold" data-value="true">Yes</button>
+                                    <button type="button" class="toggle-btn active" data-field="table_first_column_bold" data-value="false">No</button>
+                                </div>
+                            </div>
+                            <div class="toggle-row">
+                                <span class="toggle-label">Last Col Bold</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn" data-field="table_last_column_bold" data-value="true">Yes</button>
+                                    <button type="button" class="toggle-btn active" data-field="table_last_column_bold" data-value="false">No</button>
+                                </div>
+                            </div>
+                            <div class="toggle-row">
+                                <span class="toggle-label">Total Row</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn" data-field="table_show_total_row" data-value="true">Yes</button>
+                                    <button type="button" class="toggle-btn active" data-field="table_show_total_row" data-value="false">No</button>
+                                </div>
+                            </div>
+                            <div class="toggle-row">
+                                <span class="toggle-label">Content Source</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn active" data-field="table_placeholder_mode" data-value="false">✨ AI Generated</button>
+                                    <button type="button" class="toggle-btn" data-field="table_placeholder_mode" data-value="true">📝 Lorem Ipsum</button>
+                                </div>
+                            </div>
+                            <div class="toggle-row">
+                                <span class="toggle-label">Header Chars</span>
+                                <div class="toggle-options" style="gap: 8px;">
+                                    <input type="number" id="table-header-min-chars" class="char-input" value="5" min="5" max="500" style="width: 60px;" title="Min chars">
+                                    <span style="color: #6b7280;">-</span>
+                                    <input type="number" id="table-header-max-chars" class="char-input" value="25" min="5" max="500" style="width: 60px;" title="Max chars">
+                                </div>
+                            </div>
+                            <div class="toggle-row">
+                                <span class="toggle-label">Cell Chars</span>
+                                <div class="toggle-options" style="gap: 8px;">
+                                    <input type="number" id="table-cell-min-chars" class="char-input" value="10" min="5" max="500" style="width: 60px;" title="Min chars">
+                                    <span style="color: #6b7280;">-</span>
+                                    <input type="number" id="table-cell-max-chars" class="char-input" value="50" min="5" max="500" style="width: 60px;" title="Max chars">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Position Config (for TEXT_BOX, METRICS, TABLE) -->
+                <div id="position-config" class="config-group" style="display: none;">
+                    <div class="form-group">
+                        <label>Grid Position (32 cols × 18 rows)</label>
+                        <div class="toggle-group">
+                            <div class="toggle-row">
+                                <span class="toggle-label">Preset</span>
+                                <div class="toggle-options">
+                                    <select id="position-preset" class="form-select">
+                                        <option value="">Custom</option>
+                                        <option value="full">Full Content Area</option>
+                                        <option value="half-left">Left Half</option>
+                                        <option value="half-right">Right Half</option>
+                                        <option value="center">Center</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grid-position-inputs">
+                            <div class="form-row">
+                                <div class="form-col">
+                                    <label for="position-start-col">Start Col</label>
+                                    <input type="number" id="position-start-col" min="1" max="32" value="2" class="num-input">
+                                </div>
+                                <div class="form-col">
+                                    <label for="position-start-row">Start Row</label>
+                                    <input type="number" id="position-start-row" min="1" max="18" value="4" class="num-input">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-col">
+                                    <label for="position-width">Width</label>
+                                    <input type="number" id="position-width" min="4" max="32" value="28" class="num-input">
+                                </div>
+                                <div class="form-col">
+                                    <label for="position-height">Height</label>
+                                    <input type="number" id="position-height" min="4" max="18" value="12" class="num-input">
+                                </div>
+                            </div>
+                        </div>
+                        <div id="position-calculated-info" class="calculated-info">
+                            <span id="position-pixel-size">1680×720 px</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- TEXT_BOX Configuration -->
+                <div id="textbox-config" style="display: none;">
+                    <div class="form-group">
+                        <label>Box Styling</label>
+                        <div class="toggle-group">
+                            <div class="toggle-row">
+                                <span class="toggle-label">Background</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn active" data-field="background" data-value="colored">Pastel</button>
+                                    <button type="button" class="toggle-btn" data-field="background" data-value="transparent">Transparent</button>
+                                </div>
+                            </div>
+                            <div class="toggle-row">
+                                <span class="toggle-label">Corners</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn active" data-field="corners" data-value="rounded">Rounded</button>
+                                    <button type="button" class="toggle-btn" data-field="corners" data-value="square">Square</button>
+                                </div>
+                            </div>
+                            <div class="toggle-row">
+                                <span class="toggle-label">Border</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn" data-field="border" data-value="true">Show</button>
+                                    <button type="button" class="toggle-btn active" data-field="border" data-value="false">Hide</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Layout & Alignment</label>
+                        <div class="toggle-group">
+                            <div class="toggle-row">
+                                <span class="toggle-label">Layout</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn active" data-field="layout" data-value="horizontal">↔ Horizontal</button>
+                                    <button type="button" class="toggle-btn" data-field="layout" data-value="vertical">↕ Vertical</button>
+                                    <button type="button" class="toggle-btn" data-field="layout" data-value="grid">⊞ Grid</button>
+                                </div>
+                            </div>
+                            <div class="toggle-row" id="textbox-grid-cols-row" style="display:none;">
+                                <span class="toggle-label">Grid Cols</span>
+                                <div class="toggle-options">
+                                    <select id="textbox-grid-cols" class="form-select-sm">
+                                        <option value="">Auto</option>
+                                        <option value="2">2</option>
+                                        <option value="3">3</option>
+                                        <option value="4">4</option>
+                                        <option value="5">5</option>
+                                        <option value="6">6</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="toggle-row">
+                                <span class="toggle-label">Heading Align</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn active" data-field="heading_align" data-value="left">⬅ Left</button>
+                                    <button type="button" class="toggle-btn" data-field="heading_align" data-value="center">↔ Center</button>
+                                    <button type="button" class="toggle-btn" data-field="heading_align" data-value="right">➡ Right</button>
+                                </div>
+                            </div>
+                            <div class="toggle-row">
+                                <span class="toggle-label">Content Align</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn active" data-field="content_align" data-value="left">⬅ Left</button>
+                                    <button type="button" class="toggle-btn" data-field="content_align" data-value="center">↔ Center</button>
+                                    <button type="button" class="toggle-btn" data-field="content_align" data-value="right">➡ Right</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Title Options</label>
+                        <div class="toggle-group">
+                            <div class="toggle-row">
+                                <span class="toggle-label">Show Title</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn active" data-field="show_title" data-value="true">Yes</button>
+                                    <button type="button" class="toggle-btn" data-field="show_title" data-value="false">No</button>
+                                </div>
+                            </div>
+                            <div class="toggle-row">
+                                <span class="toggle-label">Title Style</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn active" data-field="title_style" data-value="plain">Colored</button>
+                                    <button type="button" class="toggle-btn" data-field="title_style" data-value="highlighted">Colored-Caps</button>
+                                    <button type="button" class="toggle-btn" data-field="title_style" data-value="colored-bg">Badge</button>
+                                    <button type="button" class="toggle-btn" data-field="title_style" data-value="neutral">Black</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>List Options</label>
+                        <div class="toggle-group">
+                            <div class="toggle-row">
+                                <span class="toggle-label">List Style</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn active" data-field="list_style" data-value="bullets">• Bullets</button>
+                                    <button type="button" class="toggle-btn" data-field="list_style" data-value="numbers">1. Numbers</button>
+                                    <button type="button" class="toggle-btn" data-field="list_style" data-value="none">¶ Plain</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Color Theme</label>
+                        <div class="toggle-group">
+                            <div class="toggle-row">
+                                <span class="toggle-label">Color</span>
+                                <div class="toggle-options">
+                                    <select id="color-variant-select" class="form-select">
+                                        <option value="">Auto (theme-based)</option>
+                                        <option value="purple" style="background:#7c3aed;color:#fff;">Purple</option>
+                                        <option value="blue" style="background:#2563eb;color:#fff;">Blue</option>
+                                        <option value="green" style="background:#059669;color:#fff;">Green</option>
+                                        <option value="red" style="background:#dc2626;color:#fff;">Red</option>
+                                        <option value="cyan" style="background:#06b6d4;color:#fff;">Cyan</option>
+                                        <option value="orange" style="background:#ea580c;color:#fff;">Orange</option>
+                                        <option value="pink" style="background:#db2777;color:#fff;">Pink</option>
+                                        <option value="yellow" style="background:#eab308;color:#fff;">Yellow</option>
+                                        <option value="teal" style="background:#14b8a6;color:#fff;">Teal</option>
+                                        <option value="indigo" style="background:#6366f1;color:#fff;">Indigo</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Content Options</label>
+                        <div class="toggle-group">
+                            <div class="toggle-row">
+                                <span class="toggle-label">Content Source</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn active" data-field="placeholder_mode" data-value="false">✨ AI Generated</button>
+                                    <button type="button" class="toggle-btn" data-field="placeholder_mode" data-value="true">📝 Lorem Ipsum</button>
+                                </div>
+                            </div>
+                            <div class="toggle-row">
+                                <span class="toggle-label">Title Chars (min-max)</span>
+                                <div class="toggle-options char-limit char-range">
+                                    <input type="number" id="title-min-chars" data-field="title_min_chars" min="5" max="500" value="30" class="char-input">
+                                    <span class="range-separator">-</span>
+                                    <input type="number" id="title-max-chars" data-field="title_max_chars" min="5" max="500" value="40" class="char-input">
+                                </div>
+                            </div>
+                            <div class="toggle-row">
+                                <span class="toggle-label">Item Chars (min-max)</span>
+                                <div class="toggle-options char-limit char-range">
+                                    <input type="number" id="item-min-chars" data-field="item_min_chars" min="5" max="500" value="80" class="char-input">
+                                    <span class="range-separator">-</span>
+                                    <input type="number" id="item-max-chars" data-field="item_max_chars" min="5" max="500" value="100" class="char-input">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- CHART Configuration -->
+                <div id="chart-config" style="display: none;">
+                    <div class="form-group">
+                        <label for="chart-type-select">Chart Type</label>
+                        <select id="chart-type-select">
+                            <optgroup label="Basic">
+                                <option value="line">Line Chart</option>
+                                <option value="bar_vertical">Vertical Bar</option>
+                                <option value="bar_horizontal">Horizontal Bar</option>
+                                <option value="pie">Pie Chart</option>
+                                <option value="doughnut">Doughnut Chart</option>
+                            </optgroup>
+                            <optgroup label="Correlation">
+                                <option value="scatter">Scatter Plot</option>
+                                <option value="bubble">Bubble Chart</option>
+                            </optgroup>
+                            <optgroup label="Radial">
+                                <option value="polar_area">Polar Area</option>
+                                <option value="radar">Radar Chart</option>
+                            </optgroup>
+                            <optgroup label="Time Series">
+                                <option value="area">Area Chart</option>
+                                <option value="area_stacked">Stacked Area</option>
+                            </optgroup>
+                            <optgroup label="Comparison">
+                                <option value="bar_grouped">Grouped Bar</option>
+                                <option value="bar_stacked">Stacked Bar</option>
+                            </optgroup>
+                            <optgroup label="Financial">
+                                <option value="waterfall">Waterfall Chart</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Options</label>
+                        <div class="toggle-group">
+                            <div class="toggle-row">
+                                <span class="toggle-label">Include Insights</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn" data-field="include_insights" data-value="true">Yes</button>
+                                    <button type="button" class="toggle-btn active" data-field="include_insights" data-value="false">No</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="series-names-group" class="form-group" style="display: none;">
+                        <label for="series-names-input">Series Names (comma-separated)</label>
+                        <input type="text" id="series-names-input" placeholder="e.g., North America, EMEA, APAC" class="text-input">
+                    </div>
+                </div>
+                <!-- IMAGE Configuration -->
+                <div id="image-config" style="display: none;">
+                    <div class="form-group">
+                        <label for="image-style-select">Image Style</label>
+                        <select id="image-style-select">
+                            <option value="realistic">Realistic</option>
+                            <option value="illustration">Illustration</option>
+                            <option value="corporate">Corporate</option>
+                            <option value="abstract">Abstract</option>
+                            <option value="minimalist">Minimalist</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="image-quality-select">Quality</label>
+                        <select id="image-quality-select">
+                            <option value="draft">Draft (fastest)</option>
+                            <option value="standard" selected>Standard</option>
+                            <option value="high">High Quality</option>
+                            <option value="ultra">Ultra Quality</option>
+                        </select>
+                    </div>
+                    <!-- Quick Position Presets -->
+                    <div class="form-group">
+                        <label for="image-position-preset">Quick Position</label>
+                        <select id="image-position-preset">
+                            <option value="">-- Select preset --</option>
+                            <option value="full">Full Content Area</option>
+                            <option value="half-left">Left Half</option>
+                            <option value="half-right">Right Half</option>
+                            <option value="quarter-tl">Top Left Quarter</option>
+                            <option value="quarter-tr">Top Right Quarter</option>
+                            <option value="quarter-bl">Bottom Left Quarter</option>
+                            <option value="quarter-br">Bottom Right Quarter</option>
+                            <option value="center-wide">Center Wide (16:9)</option>
+                            <option value="center-square">Center Square (1:1)</option>
+                        </select>
+                        <span class="form-hint">Or set custom grid position below</span>
+                    </div>
+                    <!-- Grid-based positioning (32 cols x 18 rows, 60px per cell) -->
+                    <div class="form-group">
+                        <label>Grid Position (32 cols × 18 rows)</label>
+                        <div class="grid-position-inputs">
+                            <div class="form-row">
+                                <div class="form-col">
+                                    <label for="image-start-col">Start Col</label>
+                                    <input type="number" id="image-start-col" min="1" max="32" value="2" class="num-input">
+                                </div>
+                                <div class="form-col">
+                                    <label for="image-start-row">Start Row</label>
+                                    <input type="number" id="image-start-row" min="1" max="18" value="4" class="num-input">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-col">
+                                    <label for="image-grid-width">Width</label>
+                                    <input type="number" id="image-grid-width" min="4" max="32" value="30" class="num-input">
+                                </div>
+                                <div class="form-col">
+                                    <label for="image-grid-height">Height</label>
+                                    <input type="number" id="image-grid-height" min="4" max="18" value="14" class="num-input">
+                                </div>
+                            </div>
+                        </div>
+                        <div id="image-calculated-info" class="calculated-info">
+                            <span id="image-pixel-size">1800×840 px</span>
+                            <span id="image-aspect-ratio">≈ 15:7 aspect</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Content Source</label>
+                        <div class="toggle-group">
+                            <div class="toggle-row">
+                                <span class="toggle-label">Source</span>
+                                <div class="toggle-options">
+                                    <button type="button" class="toggle-btn active" data-field="image_placeholder_mode" data-value="false">✨ AI Generated</button>
+                                    <button type="button" class="toggle-btn" data-field="image_placeholder_mode" data-value="true">📷 Placeholder</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group" id="prompt-group">
+                    <label for="prompt-input">Content Description</label>
+                    <textarea id="prompt-input" placeholder="Describe what content you want..." rows="3"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" id="modal-cancel" class="secondary-btn">Cancel</button>
+                    <button type="submit" id="modal-submit" class="primary-btn">Add to Canvas</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="hidden">
+        <div class="spinner"></div>
+        <p>Generating...</p>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/session-manager.js"></script>
+    <script src="js/api-client.js"></script>
+    <script src="js/canvas-renderer.js"></script>
+    <script src="js/atomic-modal.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

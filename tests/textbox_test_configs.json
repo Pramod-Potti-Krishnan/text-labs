@@ -1,0 +1,434 @@
+{
+  "api_url": "https://web-production-5daf.up.railway.app/v1.2/atomic/TEXT_BOX",
+  "default_config": {
+    "prompt": "Generate text boxes about software development best practices",
+    "count": 3,
+    "items_per_box": 4,
+    "gridWidth": 28,
+    "gridHeight": 12,
+    "title_max_chars": 40,
+    "item_max_chars": 100
+  },
+  "tests": [
+    {
+      "id": 1,
+      "name": "Default Config",
+      "description": "Baseline test with all default values",
+      "placeholder_mode": true,
+      "config": {
+        "list_style": "bullets",
+        "background_style": "colored",
+        "corners": "rounded",
+        "border": false,
+        "color_scheme": "gradient",
+        "layout": "horizontal",
+        "theme_mode": "light",
+        "heading_align": "left",
+        "content_align": "left",
+        "show_title": true,
+        "title_style": "plain"
+      }
+    },
+    {
+      "id": 2,
+      "name": "Numbers List",
+      "description": "Numbered items instead of bullets",
+      "placeholder_mode": true,
+      "config": {
+        "list_style": "numbers",
+        "background_style": "colored",
+        "corners": "rounded",
+        "border": false,
+        "color_scheme": "gradient",
+        "layout": "horizontal",
+        "theme_mode": "light",
+        "heading_align": "left",
+        "content_align": "left",
+        "show_title": true,
+        "title_style": "plain"
+      }
+    },
+    {
+      "id": 3,
+      "name": "Plain Text",
+      "description": "No list markers (paragraphs)",
+      "placeholder_mode": true,
+      "config": {
+        "list_style": "none",
+        "background_style": "colored",
+        "corners": "rounded",
+        "border": false,
+        "color_scheme": "gradient",
+        "layout": "horizontal",
+        "theme_mode": "light",
+        "heading_align": "left",
+        "content_align": "left",
+        "show_title": true,
+        "title_style": "plain"
+      }
+    },
+    {
+      "id": 4,
+      "name": "Transparent BG",
+      "description": "Transparent background instead of colored",
+      "placeholder_mode": true,
+      "config": {
+        "list_style": "bullets",
+        "background_style": "transparent",
+        "corners": "rounded",
+        "border": false,
+        "color_scheme": "gradient",
+        "layout": "horizontal",
+        "theme_mode": "light",
+        "heading_align": "left",
+        "content_align": "left",
+        "show_title": true,
+        "title_style": "plain"
+      }
+    },
+    {
+      "id": 5,
+      "name": "Square Corners",
+      "description": "Sharp square corners instead of rounded",
+      "placeholder_mode": true,
+      "config": {
+        "list_style": "bullets",
+        "background_style": "colored",
+        "corners": "square",
+        "border": false,
+        "color_scheme": "gradient",
+        "layout": "horizontal",
+        "theme_mode": "light",
+        "heading_align": "left",
+        "content_align": "left",
+        "show_title": true,
+        "title_style": "plain"
+      }
+    },
+    {
+      "id": 6,
+      "name": "With Border",
+      "description": "Border enabled around boxes",
+      "placeholder_mode": true,
+      "config": {
+        "list_style": "bullets",
+        "background_style": "transparent",
+        "corners": "rounded",
+        "border": true,
+        "color_scheme": "gradient",
+        "layout": "horizontal",
+        "theme_mode": "light",
+        "heading_align": "left",
+        "content_align": "left",
+        "show_title": true,
+        "title_style": "plain"
+      }
+    },
+    {
+      "id": 7,
+      "name": "Solid Colors",
+      "description": "Solid color scheme instead of gradient",
+      "placeholder_mode": true,
+      "config": {
+        "list_style": "bullets",
+        "background_style": "colored",
+        "corners": "rounded",
+        "border": false,
+        "color_scheme": "solid",
+        "layout": "horizontal",
+        "theme_mode": "light",
+        "heading_align": "left",
+        "content_align": "left",
+        "show_title": true,
+        "title_style": "plain"
+      }
+    },
+    {
+      "id": 8,
+      "name": "Accent Light",
+      "description": "Accent color scheme with light theme mode",
+      "placeholder_mode": true,
+      "config": {
+        "list_style": "bullets",
+        "background_style": "transparent",
+        "corners": "rounded",
+        "border": false,
+        "color_scheme": "accent",
+        "layout": "horizontal",
+        "theme_mode": "light",
+        "heading_align": "left",
+        "content_align": "left",
+        "show_title": true,
+        "title_style": "plain"
+      }
+    },
+    {
+      "id": 9,
+      "name": "Accent Dark",
+      "description": "Accent color scheme with dark theme mode",
+      "placeholder_mode": true,
+      "config": {
+        "list_style": "bullets",
+        "background_style": "transparent",
+        "corners": "rounded",
+        "border": false,
+        "color_scheme": "accent",
+        "layout": "horizontal",
+        "theme_mode": "dark",
+        "heading_align": "left",
+        "content_align": "left",
+        "show_title": true,
+        "title_style": "plain"
+      }
+    },
+    {
+      "id": 10,
+      "name": "Vertical Layout",
+      "description": "Stacked vertical layout",
+      "placeholder_mode": true,
+      "config": {
+        "list_style": "bullets",
+        "background_style": "colored",
+        "corners": "rounded",
+        "border": false,
+        "color_scheme": "gradient",
+        "layout": "vertical",
+        "theme_mode": "light",
+        "heading_align": "left",
+        "content_align": "left",
+        "show_title": true,
+        "title_style": "plain"
+      }
+    },
+    {
+      "id": 11,
+      "name": "Grid Layout",
+      "description": "2x2 grid layout",
+      "placeholder_mode": true,
+      "config": {
+        "list_style": "bullets",
+        "background_style": "colored",
+        "corners": "rounded",
+        "border": false,
+        "color_scheme": "gradient",
+        "layout": "grid",
+        "theme_mode": "light",
+        "heading_align": "left",
+        "content_align": "left",
+        "show_title": true,
+        "title_style": "plain"
+      }
+    },
+    {
+      "id": 12,
+      "name": "Center Aligned",
+      "description": "Center aligned heading and content",
+      "placeholder_mode": true,
+      "config": {
+        "list_style": "bullets",
+        "background_style": "colored",
+        "corners": "rounded",
+        "border": false,
+        "color_scheme": "gradient",
+        "layout": "horizontal",
+        "theme_mode": "light",
+        "heading_align": "center",
+        "content_align": "center",
+        "show_title": true,
+        "title_style": "plain"
+      }
+    },
+    {
+      "id": 13,
+      "name": "Right Aligned",
+      "description": "Right aligned heading and content",
+      "placeholder_mode": true,
+      "config": {
+        "list_style": "bullets",
+        "background_style": "colored",
+        "corners": "rounded",
+        "border": false,
+        "color_scheme": "gradient",
+        "layout": "horizontal",
+        "theme_mode": "light",
+        "heading_align": "right",
+        "content_align": "right",
+        "show_title": true,
+        "title_style": "plain"
+      }
+    },
+    {
+      "id": 14,
+      "name": "No Title",
+      "description": "Title hidden (show_title=false)",
+      "placeholder_mode": true,
+      "config": {
+        "list_style": "bullets",
+        "background_style": "colored",
+        "corners": "rounded",
+        "border": false,
+        "color_scheme": "gradient",
+        "layout": "horizontal",
+        "theme_mode": "light",
+        "heading_align": "left",
+        "content_align": "left",
+        "show_title": false,
+        "title_style": "plain"
+      }
+    },
+    {
+      "id": 15,
+      "name": "Max Items",
+      "description": "Maximum 7 items per box",
+      "placeholder_mode": true,
+      "config": {
+        "list_style": "bullets",
+        "background_style": "colored",
+        "corners": "rounded",
+        "border": false,
+        "color_scheme": "gradient",
+        "layout": "horizontal",
+        "theme_mode": "light",
+        "heading_align": "left",
+        "content_align": "left",
+        "show_title": true,
+        "title_style": "plain"
+      },
+      "items_per_box": 7
+    },
+    {
+      "id": 16,
+      "name": "Single Box",
+      "description": "Only 1 text box (count=1)",
+      "placeholder_mode": true,
+      "config": {
+        "list_style": "bullets",
+        "background_style": "colored",
+        "corners": "rounded",
+        "border": false,
+        "color_scheme": "gradient",
+        "layout": "horizontal",
+        "theme_mode": "light",
+        "heading_align": "left",
+        "content_align": "left",
+        "show_title": true,
+        "title_style": "plain"
+      },
+      "count": 1
+    },
+    {
+      "id": 17,
+      "name": "Complex: Num+Vert+Border",
+      "description": "Numbers, vertical, square, border, solid, center",
+      "placeholder_mode": true,
+      "config": {
+        "list_style": "numbers",
+        "background_style": "transparent",
+        "corners": "square",
+        "border": true,
+        "color_scheme": "solid",
+        "layout": "vertical",
+        "theme_mode": "light",
+        "heading_align": "center",
+        "content_align": "center",
+        "show_title": true,
+        "title_style": "plain"
+      }
+    },
+    {
+      "id": 18,
+      "name": "Complex: None+Grid+Accent",
+      "description": "No list, grid layout, accent, dark mode",
+      "placeholder_mode": true,
+      "config": {
+        "list_style": "none",
+        "background_style": "transparent",
+        "corners": "rounded",
+        "border": false,
+        "color_scheme": "accent",
+        "layout": "grid",
+        "theme_mode": "dark",
+        "heading_align": "left",
+        "content_align": "left",
+        "show_title": true,
+        "title_style": "plain"
+      }
+    },
+    {
+      "id": 19,
+      "name": "Complex: All Options",
+      "description": "Maximum variation test",
+      "placeholder_mode": true,
+      "config": {
+        "list_style": "numbers",
+        "background_style": "colored",
+        "corners": "square",
+        "border": true,
+        "color_scheme": "solid",
+        "layout": "grid",
+        "theme_mode": "dark",
+        "heading_align": "right",
+        "content_align": "right",
+        "show_title": true,
+        "title_style": "plain"
+      }
+    },
+    {
+      "id": 20,
+      "name": "Title: Highlighted",
+      "description": "Highlighted title style (bold, larger)",
+      "placeholder_mode": true,
+      "config": {
+        "list_style": "bullets",
+        "background_style": "colored",
+        "corners": "rounded",
+        "border": false,
+        "color_scheme": "gradient",
+        "layout": "horizontal",
+        "theme_mode": "light",
+        "heading_align": "left",
+        "content_align": "left",
+        "show_title": true,
+        "title_style": "highlighted"
+      }
+    },
+    {
+      "id": 21,
+      "name": "Title: Colored Badge",
+      "description": "Title in colored badge/pill (LLM mode)",
+      "placeholder_mode": false,
+      "config": {
+        "list_style": "bullets",
+        "background_style": "colored",
+        "corners": "rounded",
+        "border": false,
+        "color_scheme": "gradient",
+        "layout": "horizontal",
+        "theme_mode": "light",
+        "heading_align": "left",
+        "content_align": "left",
+        "show_title": true,
+        "title_style": "colored-bg"
+      }
+    },
+    {
+      "id": 22,
+      "name": "Title: Badge + Accent",
+      "description": "Colored badge title with accent scheme (LLM mode)",
+      "placeholder_mode": false,
+      "config": {
+        "list_style": "bullets",
+        "background_style": "transparent",
+        "corners": "rounded",
+        "border": false,
+        "color_scheme": "accent",
+        "layout": "horizontal",
+        "theme_mode": "light",
+        "heading_align": "left",
+        "content_align": "left",
+        "show_title": true,
+        "title_style": "colored-bg"
+      }
+    }
+  ]
+}

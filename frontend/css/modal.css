@@ -1,0 +1,572 @@
+/* Text Labs - Modal Styles */
+
+.modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal.hidden {
+    display: none;
+}
+
+.modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+}
+
+.modal-content {
+    position: relative;
+    width: 90%;
+    max-width: 700px;
+    max-height: 90vh;
+    overflow-y: auto;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+    animation: modalIn 0.2s ease-out;
+}
+
+@keyframes modalIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95) translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-lg);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.close-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 1.5rem;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: var(--transition-fast);
+}
+
+.close-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+#atomic-form {
+    padding: var(--spacing-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.form-group label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.form-group select,
+.form-group textarea {
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.875rem;
+    transition: var(--transition-fast);
+}
+
+.form-group select:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.form-group select {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23a0a0a0' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 36px;
+}
+
+.form-group textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.form-group textarea::placeholder {
+    color: var(--text-muted);
+}
+
+.form-row {
+    display: flex;
+    gap: var(--spacing-md);
+}
+
+.form-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-md);
+    padding-top: var(--spacing-md);
+    border-top: 1px solid var(--border-color);
+}
+
+/* Component type indicator in modal header */
+.modal-header .type-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.modal-header .type-icon {
+    font-size: 1.5rem;
+}
+
+.modal-header .type-badge {
+    font-size: 0.75rem;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+}
+
+/* Help text */
+.form-help {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+/* TEXT_BOX Toggle Buttons */
+.toggle-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-md);
+}
+
+.toggle-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    min-width: 80px;
+}
+
+.toggle-options {
+    display: flex;
+    gap: 2px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    padding: 2px;
+}
+
+.toggle-btn {
+    padding: 6px 12px;
+    background: transparent;
+    border: none;
+    border-radius: calc(var(--radius-md) - 2px);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition-fast);
+    white-space: nowrap;
+}
+
+.toggle-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.toggle-btn.active {
+    background: var(--accent-primary);
+    color: white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Compact modal for more options */
+#textbox-config {
+    max-height: 280px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+#textbox-config::-webkit-scrollbar {
+    width: 4px;
+}
+
+#textbox-config::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#textbox-config::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 2px;
+}
+
+#textbox-config .form-group {
+    padding-bottom: var(--spacing-sm);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+#textbox-config .form-group:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+#textbox-config .form-group > label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    margin-bottom: var(--spacing-xs);
+}
+
+/* Form select dropdowns */
+.form-select {
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    cursor: pointer;
+    min-width: 160px;
+}
+
+.form-select:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.form-select option {
+    padding: 8px;
+}
+
+/* Character limit number inputs */
+.char-input {
+    width: 70px;
+    padding: 6px 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    text-align: center;
+    -moz-appearance: textfield;
+}
+
+.char-input::-webkit-outer-spin-button,
+.char-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.char-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+/* Character range inputs (min-max) */
+.char-range {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.char-range .char-input {
+    width: 60px;
+}
+
+.range-separator {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+/* Hide prompt group when placeholder mode is active */
+#prompt-group.hidden {
+    display: none;
+}
+
+/* Text input (for text fields like series names) */
+.text-input {
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.875rem;
+    transition: var(--transition-fast);
+    width: 100%;
+}
+
+.text-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.text-input::placeholder {
+    color: var(--text-muted);
+}
+
+/* METRICS Configuration - Two column layout */
+#metrics-config .toggle-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-sm) var(--spacing-lg);
+}
+
+#metrics-config .toggle-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+}
+
+#metrics-config .toggle-options {
+    width: 100%;
+    justify-content: flex-start;
+}
+
+/* TABLE Configuration - Two column layout */
+#table-styling-config .toggle-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-sm) var(--spacing-lg);
+}
+
+#table-styling-config .toggle-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+}
+
+#table-styling-config .toggle-options {
+    width: 100%;
+    justify-content: flex-start;
+}
+
+/* CHART Configuration */
+#chart-config {
+    max-height: 200px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+#chart-config .form-group {
+    padding-bottom: var(--spacing-sm);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+#chart-config .form-group:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+/* Chart type select with optgroups */
+#chart-type-select optgroup {
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+}
+
+#chart-type-select option {
+    font-weight: 400;
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+    padding: 4px 8px;
+}
+
+/* IMAGE Configuration */
+#image-config {
+    max-height: 300px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+#image-config .form-group {
+    padding-bottom: var(--spacing-sm);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+#image-config .form-group:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+#image-config .form-group > label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-xs);
+}
+
+#image-config .form-select,
+#image-config select {
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+#image-config .form-row {
+    display: flex;
+    gap: var(--spacing-md);
+}
+
+#image-config .form-col {
+    flex: 1;
+}
+
+#image-config .text-input {
+    width: 100%;
+}
+
+/* Image button styling in toolbar */
+.atomic-btn.image {
+    border-color: rgba(147, 51, 234, 0.3);
+}
+
+.atomic-btn.image:hover {
+    background: rgba(147, 51, 234, 0.15);
+    border-color: rgba(147, 51, 234, 0.5);
+}
+
+.atomic-btn.image .btn-icon {
+    color: #a855f7;
+}
+
+/* Grid Position Inputs for Image Configuration */
+.grid-position-inputs {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.grid-position-inputs .form-row {
+    display: flex;
+    gap: var(--spacing-md);
+}
+
+.grid-position-inputs .form-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.grid-position-inputs label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.num-input {
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-align: center;
+    -moz-appearance: textfield;
+}
+
+.num-input::-webkit-outer-spin-button,
+.num-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.num-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+/* Calculated info display */
+.calculated-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(99, 102, 241, 0.1);
+    border-radius: var(--radius-md);
+    margin-top: var(--spacing-xs);
+}
+
+.calculated-info span {
+    font-size: 0.75rem;
+    color: var(--accent-primary);
+    font-weight: 500;
+}
+
+#image-pixel-size {
+    font-family: 'SF Mono', Monaco, monospace;
+}
+
+#image-aspect-ratio {
+    opacity: 0.8;
+}
+
+/* Form hint text */
+.form-hint {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+    font-style: italic;
+}
