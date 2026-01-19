@@ -841,6 +841,15 @@ async def send_message(
                 else:
                     chart_config = intent.chart_config or ChartConfigData()
 
+                # Apply position_config to chart_config if provided (must happen before chart generation)
+                if request.position_config:
+                    pos = request.position_config
+                    logger.info(f"[CHAT] Applying position_config to CHART: {pos}")
+                    chart_config.start_col = pos.get('start_col')
+                    chart_config.start_row = pos.get('start_row')
+                    chart_config.position_width = pos.get('position_width')
+                    chart_config.position_height = pos.get('position_height')
+
                 # Create presentation if not exists (needed for slide_id)
                 if not presentation_id:
                     result = await lsc.create_presentation(canvas_state.slide_title or "Text Labs Slide")
@@ -905,12 +914,25 @@ async def send_message(
                         {chart_result.insights_html}
                     </div>'''
 
-                # Pass Analytics HTML directly to Layout Service
-                # Layout Service already has Chart.js loaded globally, so charts render natively
-                # This avoids double iframe nesting and preserves animations
-                element_html = f'''<div class="chart-direct-container" style="width: 100%; height: 100%; position: relative; overflow: hidden;">
-    {chart_html_content}
-</div>'''
+                # Wrap chart in complete HTML document with Chart.js CDN
+                # Frontend will render this in iframe srcdoc for isolated script execution
+                # This approach is proven to work (same as test scripts)
+                element_html = f'''<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        body {{ margin: 0; padding: 0; overflow: hidden; background: transparent; }}
+        .atomic-chart-container {{ width: 100%; height: 100%; }}
+        .chart-direct-container {{ width: 100%; height: 100%; position: relative; overflow: hidden; }}
+    </style>
+</head>
+<body>
+    <div class="chart-direct-container">
+        {chart_html_content}
+    </div>
+</body>
+</html>'''
 
                 # Build position dict for canvas (similar to IMAGE handling)
                 chart_position = {}

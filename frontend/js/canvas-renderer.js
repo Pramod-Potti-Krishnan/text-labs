@@ -163,9 +163,10 @@ class CanvasRenderer {
     }
 
     /**
-     * Insert chart HTML directly (no iframe wrapper)
-     * Charts render natively in Layout Service which has Chart.js loaded globally
-     * @param {string} html - Raw chart HTML from Analytics Service
+     * Insert chart HTML using iframe srcdoc for isolated script execution
+     * The chart HTML is a complete HTML document with Chart.js CDN included
+     * This approach is proven to work (same as test scripts)
+     * @param {string} html - Complete HTML document from backend
      * @param {object} position - Grid position (optional)
      */
     insertChart(html, position = null) {
@@ -177,37 +178,33 @@ class CanvasRenderer {
 
         const elementId = 'chart_' + Date.now();
 
-        // Send HTML to Layout Service via insertTextBox
+        // Escape HTML for use in srcdoc attribute
+        // Replace quotes and apostrophes to prevent breaking the attribute
+        const escapedHtml = html
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+
+        // Wrap chart HTML in iframe with srcdoc for isolated script execution
+        // This creates a new document context where scripts auto-execute
+        const iframeHtml = `<iframe
+            id="${elementId}-iframe"
+            style="width: 100%; height: 100%; border: none; display: block; background: transparent;"
+            srcdoc="${escapedHtml}"
+            scrolling="no"
+            frameborder="0"
+        ></iframe>`;
+
+        // Send iframe-wrapped HTML to Layout Service
         this.sendCommand('insertTextBox', {
             elementId: elementId,
             slideIndex: 0,
-            content: html,
+            content: iframeHtml,
             gridRow: position?.gridRow || defaultPosition.gridRow,
             gridColumn: position?.gridColumn || defaultPosition.gridColumn,
             skipAutoSize: !!position,  // Skip auto-sizing when position explicitly provided
             draggable: true,
             resizable: true
         });
-
-        // Extract and execute scripts separately (cross-origin workaround)
-        // The Layout Service can't execute scripts from innerHTML, so we send them via postMessage
-        const scriptMatches = html.match(/<script[^>]*>([\s\S]*?)<\/script>/gi);
-        if (scriptMatches) {
-            // Give Layout Service time to insert the HTML first
-            setTimeout(() => {
-                scriptMatches.forEach((scriptTag, index) => {
-                    const scriptContent = scriptTag.replace(/<script[^>]*>/i, '').replace(/<\/script>/i, '');
-                    if (scriptContent.trim()) {
-                        console.log(`[Canvas] Sending script ${index + 1}/${scriptMatches.length} for execution`);
-                        this.sendCommand('executeScript', {
-                            script: scriptContent,
-                            elementId: elementId,
-                            scriptIndex: index
-                        });
-                    }
-                });
-            }, 100);  // Small delay to ensure HTML is inserted first
-        }
 
         // Track locally with type indicator
         this.elements.push({
@@ -220,7 +217,7 @@ class CanvasRenderer {
         this.updateElementCount();
         this.hidePlaceholder();
 
-        console.log('[Canvas] Chart inserted:', elementId);
+        console.log('[Canvas] Chart inserted via iframe srcdoc:', elementId);
         return elementId;
     }
 
