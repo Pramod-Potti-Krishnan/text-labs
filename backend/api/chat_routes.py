@@ -916,19 +916,53 @@ async def send_message(
 
                 # Wrap chart in complete HTML document with Chart.js CDN
                 # Frontend will render this in iframe srcdoc for isolated script execution
-                # This approach is proven to work (same as test scripts)
+                # Uses stretch-to-fit pattern like tables: 100% dimensions with 10px left padding
                 element_html = f'''<!DOCTYPE html>
 <html>
 <head>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
-        body {{ margin: 0; padding: 0; overflow: hidden; background: transparent; }}
-        .atomic-chart-container {{ width: 100%; height: 100%; }}
-        .chart-direct-container {{ width: 100%; height: 100%; position: relative; overflow: hidden; }}
+        * {{ box-sizing: border-box; }}
+        html, body {{
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: transparent;
+        }}
+        /* Stretch-to-fit container with 10px left padding (like tables) */
+        .chart-wrapper {{
+            width: 100%;
+            height: 100%;
+            padding: 10px 10px 10px 10px;
+            overflow: hidden;
+        }}
+        /* Override any fixed pixel dimensions from analytics service */
+        .atomic-chart-container {{
+            width: 100% !important;
+            height: 100% !important;
+            max-width: 100% !important;
+            max-height: 100% !important;
+        }}
+        .chart-content {{
+            width: 100% !important;
+            height: calc(100% - 30px) !important;
+        }}
+        .chart-content canvas {{
+            width: 100% !important;
+            height: 100% !important;
+        }}
+        .chart-direct-container {{
+            width: 100%;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+        }}
     </style>
 </head>
 <body>
-    <div class="chart-direct-container">
+    <div class="chart-wrapper">
         {chart_html_content}
     </div>
 </body>
