@@ -59,8 +59,11 @@ class TextLabsApp {
                 }
             }
 
-            // Restore canvas state if any
-            await this.restoreCanvasState();
+            // NOTE: Canvas state restoration is handled by Layout Service (presentation-viewer.html)
+            // which restores from Supabase with correct positions after user resize operations.
+            // DO NOT call restoreCanvasState() here - it would re-insert elements with stale
+            // positions from text-labs JSON, overwriting the user's resize changes.
+            // See: layout_builder_main/v7.5-main/viewer/presentation-viewer.html
 
         } catch (error) {
             console.error('[App] Initialization error:', error);

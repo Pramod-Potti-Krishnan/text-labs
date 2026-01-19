@@ -235,11 +235,11 @@ class ImageClient:
         style_parts = [
             "width: 100%",
             "height: 100%",
-            "object-fit: contain",
+            "object-fit: cover",
             "display: block"
         ]
 
-        return f'''<div class="image-element" data-element-id="{element_id}" style="width: 100%; height: 100%; padding: 10px; box-sizing: border-box; position: relative; overflow: hidden;">
+        return f'''<div class="image-element" data-element-id="{element_id}" style="width: 100%; height: 100%; position: relative; overflow: hidden;">
     <img
         src="{image_url}"
         alt="AI-generated image"

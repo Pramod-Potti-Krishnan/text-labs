@@ -163,12 +163,15 @@ class CanvasRenderer {
     }
 
     /**
-     * Insert chart HTML using iframe srcdoc for isolated script execution
-     * The chart HTML is a complete HTML document with Chart.js CDN included
-     * This approach is proven to work (same as test scripts)
-     * @param {string} html - Complete HTML document from backend
+     * Insert chart element using Layout Service's insertChart command
+     * v7.5.16: Use insertChart (not insertTextBox) for proper drag handling
+     * - No iframe wrapping - Layout Service handles script execution
+     * - Gets .inserted-chart class with proper drag handling
+     * - Canvas pointer-events managed during drag
+     *
+     * @param {string} html - Chart HTML from analytics service
      * @param {object} position - Grid position (optional)
-     * @param {string} elementId - Optional element ID from backend for persistence
+     * @param {string} elementId - Optional element ID for persistence
      */
     insertChart(html, position = null, elementId = null) {
         // Charts get a larger default area
@@ -177,33 +180,19 @@ class CanvasRenderer {
             gridColumn: '2/32'
         };
 
-        // Use provided elementId or generate one (deterministic ID enables persistence)
+        // Use provided elementId or generate one
         const id = elementId || ('chart_' + Date.now());
 
-        // Escape HTML for use in srcdoc attribute
-        // Replace quotes and apostrophes to prevent breaking the attribute
-        const escapedHtml = html
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
-
-        // Wrap chart HTML in iframe with srcdoc for isolated script execution
-        // This creates a new document context where scripts auto-execute
-        const iframeHtml = `<iframe
-            id="${id}-iframe"
-            style="width: 100%; height: 100%; border: none; display: block; background: transparent;"
-            srcdoc="${escapedHtml}"
-            scrolling="no"
-            frameborder="0"
-        ></iframe>`;
-
-        // Send iframe-wrapped HTML to Layout Service
-        this.sendCommand('insertTextBox', {
-            elementId: id,
+        // v7.5.16: Use insertChart command for proper chart handling
+        // - No iframe wrapping - Layout Service handles script execution
+        // - Gets .inserted-chart class with proper drag handling
+        // - Canvas pointer-events managed during drag
+        this.sendCommand('insertChart', {
+            id: id,
             slideIndex: 0,
-            content: iframeHtml,
+            chartHtml: html,  // Raw HTML, not iframe-wrapped
             gridRow: position?.gridRow || defaultPosition.gridRow,
             gridColumn: position?.gridColumn || defaultPosition.gridColumn,
-            skipAutoSize: !!position,  // Skip auto-sizing when position explicitly provided
             draggable: true,
             resizable: true
         });
@@ -219,7 +208,7 @@ class CanvasRenderer {
         this.updateElementCount();
         this.hidePlaceholder();
 
-        console.log('[Canvas] Chart inserted via iframe srcdoc:', id);
+        console.log('[Canvas] Chart inserted via insertChart command:', id);
         return id;
     }
 
@@ -430,6 +419,14 @@ class CanvasRenderer {
                         console.log('[Canvas] Element inserted:', elementId);
                     } else {
                         console.error('[Canvas] Element insert failed:', error);
+                    }
+                    break;
+
+                case 'insertChart':
+                    if (success) {
+                        console.log('[Canvas] Chart inserted:', elementId);
+                    } else {
+                        console.error('[Canvas] Chart insert failed:', error);
                     }
                     break;
 
