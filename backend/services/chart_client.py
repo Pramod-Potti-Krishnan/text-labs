@@ -47,6 +47,8 @@ class ChartResponse(BaseModel):
     data_used: Optional[Any] = None
     generation_time_ms: Optional[int] = None
     error: Optional[str] = None
+    # v3.8.1: Grid position returned by analytics service
+    grid_position: Optional[dict] = None  # {start_col, start_row, width, height, grid_row, grid_column}
 
 
 class ChartClient:
@@ -86,7 +88,12 @@ class ChartClient:
         series_names: Optional[List[str]] = None,
         width: int = 850,
         height: int = 500,
-        enable_editor: bool = True
+        enable_editor: bool = True,
+        # v3.8.1: Grid position parameters (optional)
+        start_col: Optional[int] = None,
+        start_row: Optional[int] = None,
+        position_width: Optional[int] = None,
+        position_height: Optional[int] = None
     ) -> ChartResponse:
         """
         Generate a chart via Analytics Service atomic endpoint.
@@ -102,6 +109,10 @@ class ChartClient:
             width: Chart width in pixels (default 850)
             height: Chart height in pixels (default 500)
             enable_editor: Enable interactive spreadsheet editor
+            start_col: Starting column position (1-32) for grid placement
+            start_row: Starting row position (1-18) for grid placement
+            position_width: Width in grid units (4-32), overrides pixel width
+            position_height: Height in grid units (4-18), overrides pixel height
 
         Returns:
             ChartResponse with success status and HTML content
@@ -133,6 +144,16 @@ class ChartClient:
         # Add series_names for multi-series chart types
         if series_names and chart_type in MULTI_SERIES_TYPES:
             payload["series_names"] = series_names
+
+        # v3.8.1: Add grid position parameters if specified
+        if start_col is not None:
+            payload["start_col"] = start_col
+        if start_row is not None:
+            payload["start_row"] = start_row
+        if position_width is not None:
+            payload["position_width"] = position_width
+        if position_height is not None:
+            payload["position_height"] = position_height
 
         logger.info(f"[ChartClient] Generating {chart_type} chart: {narrative[:50]}...")
 
@@ -166,6 +187,11 @@ class ChartClient:
                         error=error_msg
                     )
 
+                # v3.8.1: Log grid_position if returned
+                grid_pos = data.get("grid_position")
+                if grid_pos:
+                    logger.info(f"[ChartClient] Grid position: {grid_pos}")
+
                 logger.info(f"[ChartClient] Successfully generated {chart_type} chart: {data.get('chart_title', 'Chart')}")
 
                 return ChartResponse(
@@ -176,7 +202,8 @@ class ChartClient:
                     insights_html=data.get("insights_html"),
                     element_id=data.get("element_id"),
                     data_used=data.get("data_used"),
-                    generation_time_ms=data.get("generation_time_ms")
+                    generation_time_ms=data.get("generation_time_ms"),
+                    grid_position=grid_pos  # v3.8.1: Include grid position from analytics service
                 )
 
         except httpx.TimeoutException:

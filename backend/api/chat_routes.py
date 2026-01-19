@@ -856,6 +856,7 @@ async def send_message(
                         )
 
                 # Generate chart via Analytics Service
+                # v3.8.1: Pass grid position parameters if specified
                 chart_result = await cc.generate(
                     chart_type=chart_config.chart_type,
                     narrative=intent.content_prompt,
@@ -864,7 +865,11 @@ async def send_message(
                     include_insights=chart_config.include_insights,
                     series_names=chart_config.series_names if chart_config.series_names else None,
                     width=850,
-                    height=500
+                    height=500,
+                    start_col=chart_config.start_col,
+                    start_row=chart_config.start_row,
+                    position_width=chart_config.position_width,
+                    position_height=chart_config.position_height
                 )
 
                 if not chart_result.success:
