@@ -301,6 +301,12 @@ class TextLabsApp {
                 }
             }
 
+            // Pass CHART config if available (bypasses NLP parsing)
+            if (config.type === 'CHART' && config.chartConfig) {
+                options.chartConfig = config.chartConfig;
+                console.log('[App] Passing chartConfig directly:', config.chartConfig);
+            }
+
             // Send as chat message to leverage existing backend logic
             const response = await this.api.sendChatMessage(this.session.id, message, options);
             console.log('[App] Toolbar response:', response);

@@ -117,6 +117,7 @@ class ChatRequest(BaseModel):
     textbox_config: Optional[TextBoxConfigData] = None
     metrics_config: Optional[MetricsConfigData] = None
     table_config: Optional[TableConfigData] = None
+    chart_config: Optional[ChartConfigData] = None  # Direct config for CHART (bypasses NLP parsing)
 
 
 class ChatResponse(BaseModel):
@@ -833,7 +834,12 @@ async def send_message(
 
             # Handle CHART component separately (uses ChartClient, not AtomicClient)
             if intent.component_type == ComponentType.CHART:
-                chart_config = intent.chart_config or ChartConfigData()
+                # Prefer direct chart_config from request over inferred config (bypasses NLP parsing)
+                if request.chart_config:
+                    chart_config = request.chart_config
+                    logger.info(f"[CHAT] Using direct chart_config from request: chart_type={chart_config.chart_type}")
+                else:
+                    chart_config = intent.chart_config or ChartConfigData()
 
                 # Create presentation if not exists (needed for slide_id)
                 if not presentation_id:

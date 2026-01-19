@@ -68,6 +68,10 @@ class TextLabsAPI {
             payload.table_config = options.tableConfig;
             console.log('[API] Including table_config:', options.tableConfig);
         }
+        if (options.chartConfig) {
+            payload.chart_config = options.chartConfig;
+            console.log('[API] Including chart_config:', options.chartConfig);
+        }
         return this.request('/api/chat/message', {
             method: 'POST',
             body: JSON.stringify(payload)
