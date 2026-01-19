@@ -177,8 +177,7 @@ class CanvasRenderer {
 
         const elementId = 'chart_' + Date.now();
 
-        // Use insertTextBox - Layout Service renders raw HTML natively
-        // Chart.js is already loaded in Layout Service, so scripts execute properly
+        // Send HTML to Layout Service via insertTextBox
         this.sendCommand('insertTextBox', {
             elementId: elementId,
             slideIndex: 0,
@@ -189,6 +188,26 @@ class CanvasRenderer {
             draggable: true,
             resizable: true
         });
+
+        // Extract and execute scripts separately (cross-origin workaround)
+        // The Layout Service can't execute scripts from innerHTML, so we send them via postMessage
+        const scriptMatches = html.match(/<script[^>]*>([\s\S]*?)<\/script>/gi);
+        if (scriptMatches) {
+            // Give Layout Service time to insert the HTML first
+            setTimeout(() => {
+                scriptMatches.forEach((scriptTag, index) => {
+                    const scriptContent = scriptTag.replace(/<script[^>]*>/i, '').replace(/<\/script>/i, '');
+                    if (scriptContent.trim()) {
+                        console.log(`[Canvas] Sending script ${index + 1}/${scriptMatches.length} for execution`);
+                        this.sendCommand('executeScript', {
+                            script: scriptContent,
+                            elementId: elementId,
+                            scriptIndex: index
+                        });
+                    }
+                });
+            }, 100);  // Small delay to ensure HTML is inserted first
+        }
 
         // Track locally with type indicator
         this.elements.push({
