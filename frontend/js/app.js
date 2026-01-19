@@ -283,9 +283,9 @@ class TextLabsApp {
                 options.imageConfig = config.imageConfig;
                 console.log('[App] Passing imageConfig directly:', config.imageConfig);
             }
-            // Pass position config for TEXT_BOX, METRICS, TABLE
+            // Pass position config for TEXT_BOX, METRICS, TABLE, CHART
             // Note: atomic-modal sends snake_case 'position_config'
-            if (config.position_config && ['TEXT_BOX', 'METRICS', 'TABLE'].includes(config.type)) {
+            if (config.position_config && ['TEXT_BOX', 'METRICS', 'TABLE', 'CHART'].includes(config.type)) {
                 options.positionConfig = config.position_config;
                 options.componentType = config.type;
                 console.log('[App] Passing position_config directly:', config.position_config);
@@ -299,10 +299,13 @@ class TextLabsApp {
                 if (config.type === 'TABLE' && config.tableConfig) {
                     options.tableConfig = config.tableConfig;
                 }
+                if (config.type === 'CHART' && config.chartConfig) {
+                    options.chartConfig = config.chartConfig;
+                }
             }
 
-            // Pass CHART config if available (bypasses NLP parsing)
-            if (config.type === 'CHART' && config.chartConfig) {
+            // Pass CHART config if available (bypasses NLP parsing) - also pass when no position config
+            if (config.type === 'CHART' && config.chartConfig && !options.chartConfig) {
                 options.chartConfig = config.chartConfig;
                 console.log('[App] Passing chartConfig directly:', config.chartConfig);
             }

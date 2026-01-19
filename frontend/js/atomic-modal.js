@@ -134,10 +134,11 @@ class AtomicModal {
             cell_max_chars: '50'
         };
 
-        // Position state for TEXT_BOX, METRICS, TABLE (grid positioning)
+        // Position state for TEXT_BOX, METRICS, TABLE, CHART (grid positioning)
         this.textboxPositionState = { start_col: 2, start_row: 4, width: 28, height: 12 };
         this.metricsPositionState = { start_col: 2, start_row: 4, width: 28, height: 8 };
         this.tablePositionState = { start_col: 2, start_row: 4, width: 28, height: 10 };
+        this.chartPositionState = { start_col: 2, start_row: 4, width: 28, height: 11 };
 
         // Chart config elements
         this.chartConfig = document.getElementById('chart-config');
@@ -782,6 +783,7 @@ class AtomicModal {
         if (this.currentType === 'TEXT_BOX') return this.textboxPositionState;
         if (this.currentType === 'METRICS') return this.metricsPositionState;
         if (this.currentType === 'TABLE') return this.tablePositionState;
+        if (this.currentType === 'CHART') return this.chartPositionState;
         return null;
     }
 
@@ -823,6 +825,9 @@ class AtomicModal {
         } else if (componentType === 'TABLE') {
             state = this.tablePositionState;
             defaults = { start_col: 2, start_row: 4, width: 28, height: 10 };
+        } else if (componentType === 'CHART') {
+            state = this.chartPositionState;
+            defaults = { start_col: 2, start_row: 4, width: 28, height: 11 };
         } else {
             return;
         }
@@ -1108,9 +1113,9 @@ class AtomicModal {
             }
         }
 
-        // Handle position config for TEXT_BOX, METRICS, TABLE
+        // Handle position config for TEXT_BOX, METRICS, TABLE, CHART
         // (IMAGE has its own position config)
-        if (['TEXT_BOX', 'METRICS', 'TABLE'].includes(componentType)) {
+        if (['TEXT_BOX', 'METRICS', 'TABLE', 'CHART'].includes(componentType)) {
             if (this.positionConfig) {
                 this.positionConfig.style.display = 'block';
             }
@@ -1275,10 +1280,10 @@ class AtomicModal {
             };
         }
 
-        // Add position config for TEXT_BOX, METRICS, TABLE
+        // Add position config for TEXT_BOX, METRICS, TABLE, CHART
         // (IMAGE has its own position config in imageConfig)
         // Note: Backend expects snake_case 'position_config', not camelCase
-        if (['TEXT_BOX', 'METRICS', 'TABLE'].includes(this.currentType)) {
+        if (['TEXT_BOX', 'METRICS', 'TABLE', 'CHART'].includes(this.currentType)) {
             const posState = this.getCurrentPositionState();
             if (posState) {
                 data.position_config = {

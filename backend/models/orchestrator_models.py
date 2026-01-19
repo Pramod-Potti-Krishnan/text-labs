@@ -149,6 +149,11 @@ class ChartConfigData(BaseModel):
     chart_type: str = "line"            # One of 14 valid chart types
     include_insights: bool = False      # Whether to include Key Insights panel
     series_names: List[str] = Field(default_factory=list)  # Custom series names for multi-series charts
+    # Grid positioning (optional, for canvas placement)
+    start_col: Optional[int] = None     # Starting column (1-32)
+    start_row: Optional[int] = None     # Starting row (1-18)
+    position_width: Optional[int] = None  # Width in grid units (4-32)
+    position_height: Optional[int] = None # Height in grid units (4-18)
 
 
 class ImageConfigData(BaseModel):

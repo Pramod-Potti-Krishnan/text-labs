@@ -1058,6 +1058,15 @@ async def send_message(
                     intent.table_config.start_row = pos.get('start_row')
                     intent.table_config.position_width = pos.get('position_width')
                     intent.table_config.position_height = pos.get('position_height')
+                elif intent.component_type == ComponentType.CHART:
+                    if request.chart_config:
+                        intent.chart_config = request.chart_config
+                    if not intent.chart_config:
+                        intent.chart_config = ChartConfigData()
+                    intent.chart_config.start_col = pos.get('start_col')
+                    intent.chart_config.start_row = pos.get('start_row')
+                    intent.chart_config.position_width = pos.get('position_width')
+                    intent.chart_config.position_height = pos.get('position_height')
 
                 # Override grid dimensions with position dimensions when specified
                 if pos.get('position_width'):
