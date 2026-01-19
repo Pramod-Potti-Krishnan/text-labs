@@ -168,15 +168,17 @@ class CanvasRenderer {
      * This approach is proven to work (same as test scripts)
      * @param {string} html - Complete HTML document from backend
      * @param {object} position - Grid position (optional)
+     * @param {string} elementId - Optional element ID from backend for persistence
      */
-    insertChart(html, position = null) {
+    insertChart(html, position = null, elementId = null) {
         // Charts get a larger default area
         const defaultPosition = {
             gridRow: '3/19',
             gridColumn: '2/32'
         };
 
-        const elementId = 'chart_' + Date.now();
+        // Use provided elementId or generate one (deterministic ID enables persistence)
+        const id = elementId || ('chart_' + Date.now());
 
         // Escape HTML for use in srcdoc attribute
         // Replace quotes and apostrophes to prevent breaking the attribute
@@ -187,7 +189,7 @@ class CanvasRenderer {
         // Wrap chart HTML in iframe with srcdoc for isolated script execution
         // This creates a new document context where scripts auto-execute
         const iframeHtml = `<iframe
-            id="${elementId}-iframe"
+            id="${id}-iframe"
             style="width: 100%; height: 100%; border: none; display: block; background: transparent;"
             srcdoc="${escapedHtml}"
             scrolling="no"
@@ -196,7 +198,7 @@ class CanvasRenderer {
 
         // Send iframe-wrapped HTML to Layout Service
         this.sendCommand('insertTextBox', {
-            elementId: elementId,
+            elementId: id,
             slideIndex: 0,
             content: iframeHtml,
             gridRow: position?.gridRow || defaultPosition.gridRow,
@@ -208,7 +210,7 @@ class CanvasRenderer {
 
         // Track locally with type indicator
         this.elements.push({
-            id: elementId,
+            id: id,
             type: 'chart',
             html: html,
             position: position || defaultPosition
@@ -217,8 +219,8 @@ class CanvasRenderer {
         this.updateElementCount();
         this.hidePlaceholder();
 
-        console.log('[Canvas] Chart inserted via iframe srcdoc:', elementId);
-        return elementId;
+        console.log('[Canvas] Chart inserted via iframe srcdoc:', id);
+        return id;
     }
 
     /**

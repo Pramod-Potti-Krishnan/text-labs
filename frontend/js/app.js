@@ -91,7 +91,7 @@ class TextLabsApp {
 
                         // Use appropriate handler based on component type
                         if (element.component_type === 'CHART') {
-                            this.canvas.insertChart(element.html, position);
+                            this.canvas.insertChart(element.html, position, element.element_id);
                         } else if (element.component_type === 'IMAGE') {
                             this.canvas.insertImage(element.html, element.grid_position, element.element_id);
                         } else {
@@ -204,7 +204,7 @@ class TextLabsApp {
 
                 // Use appropriate insert method based on component type
                 if (response.element.component_type === 'CHART') {
-                    this.canvas.insertChart(response.element.html, position);
+                    this.canvas.insertChart(response.element.html, position, response.element.element_id);
                 } else if (response.element.component_type === 'IMAGE') {
                     this.canvas.insertImage(
                         response.element.html,
@@ -332,7 +332,7 @@ class TextLabsApp {
 
                 // Use appropriate insert method based on component type
                 if (response.element.component_type === 'CHART') {
-                    this.canvas.insertChart(response.element.html, position);
+                    this.canvas.insertChart(response.element.html, position, response.element.element_id);
                 } else if (response.element.component_type === 'IMAGE') {
                     this.canvas.insertImage(
                         response.element.html,
