@@ -84,10 +84,19 @@ class TextLabsApp {
                 console.log('[App] Restoring', state.elements.length, 'elements');
                 state.elements.forEach(element => {
                     if (element.html) {
-                        this.canvas.insertElement(element.html, {
-                            gridRow: element.grid_position?.grid_row || '4/18',
-                            gridColumn: element.grid_position?.grid_column || '2/32'
-                        });
+                        const position = element.grid_position ? {
+                            gridRow: element.grid_position.grid_row || '4/18',
+                            gridColumn: element.grid_position.grid_column || '2/32'
+                        } : null;
+
+                        // Use appropriate handler based on component type
+                        if (element.component_type === 'CHART') {
+                            this.canvas.insertChart(element.html, position);
+                        } else if (element.component_type === 'IMAGE') {
+                            this.canvas.insertImage(element.html, element.grid_position, element.element_id);
+                        } else {
+                            this.canvas.insertElement(element.html, position);
+                        }
                     }
                 });
             }

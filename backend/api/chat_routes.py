@@ -907,6 +907,20 @@ async def send_message(
     {chart_html_content}
 </div>'''
 
+                # Build position dict for canvas (similar to IMAGE handling)
+                chart_position = {}
+                if chart_config.start_col is not None:
+                    start_col = chart_config.start_col
+                    start_row = chart_config.start_row or 4
+                    width = chart_config.position_width or 14
+                    height = chart_config.position_height or 11
+                    chart_position["grid_row"] = f"{start_row}/{start_row + height}"
+                    chart_position["grid_column"] = f"{start_col}/{start_col + width}"
+                    chart_position["start_col"] = start_col
+                    chart_position["start_row"] = start_row
+                    chart_position["width"] = width
+                    chart_position["height"] = height
+
                 return ChatResponse(
                     success=True,
                     response_text=response_text,
@@ -917,7 +931,8 @@ async def send_message(
                         "chart_type": chart_config.chart_type,
                         "chart_title": chart_result.chart_title,
                         "element_id": chart_result.element_id,
-                        "data_used": chart_result.data_used
+                        "data_used": chart_result.data_used,
+                        "grid_position": chart_position if chart_position else None
                     },
                     presentation_id=presentation_id,
                     viewer_url=viewer_url,
