@@ -11,6 +11,9 @@ Supports all 14 atomic chart types:
 - Time Series: area, area_stacked
 - Comparison: bar_grouped, bar_stacked
 - Financial: waterfall
+
+v7.5.40 Fix:
+- Added element_id parameter to preserve chart data edits across regeneration
 """
 
 import os
@@ -89,6 +92,8 @@ class ChartClient:
         width: int = 850,
         height: int = 500,
         enable_editor: bool = True,
+        # v7.5.40 Fix: Preserve element_id on chart regeneration
+        element_id: Optional[str] = None,
         # v3.8.1: Grid position parameters (optional)
         start_col: Optional[int] = None,
         start_row: Optional[int] = None,
@@ -109,6 +114,8 @@ class ChartClient:
             width: Chart width in pixels (default 850)
             height: Chart height in pixels (default 500)
             enable_editor: Enable interactive spreadsheet editor
+            element_id: Existing element_id to preserve (for chart updates/regeneration).
+                       Pass this when updating an existing chart to preserve data edits.
             start_col: Starting column position (1-32) for grid placement
             start_row: Starting row position (1-18) for grid placement
             position_width: Width in grid units (4-32), overrides pixel width
@@ -140,6 +147,11 @@ class ChartClient:
             "height": height,
             "enable_editor": enable_editor
         }
+
+        # v7.5.40 Fix: Pass element_id to preserve chart data edits
+        if element_id:
+            payload["element_id"] = element_id
+            logger.info(f"[ChartClient] Passing element_id for persistence: {element_id}")
 
         # Add series_names for multi-series chart types
         if series_names and chart_type in MULTI_SERIES_TYPES:
