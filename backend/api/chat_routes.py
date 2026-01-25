@@ -4,6 +4,14 @@ Chat Routes for Text Labs v2
 
 Handle chat messages and orchestrate element generation.
 Integrates with Layout Service for presentation display.
+
+v2.1: LLM-Powered Parameter Understanding Layer
+- Uses Gemini with Pydantic structured output for parameter extraction
+- Specialized extractors understand component-specific semantics:
+  - TABLE: "6 rows" is structural, NOT count
+  - TEXT_BOX: "5 bullet points" is items_per_instance, NOT count
+- User's Advanced settings override LLM extraction
+- Guaranteed valid JSON responses with type safety
 """
 
 import html
@@ -11,7 +19,7 @@ import json
 import logging
 import re
 import uuid
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any, TypeVar, Type, Tuple, Union
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 
@@ -20,6 +28,10 @@ from ..models.canvas_models import PlacedElement, GridPosition
 from ..models.orchestrator_models import (
     ComponentType, ActionType, Intent, COMPONENT_CONFIG, TextBoxConfigData, ChartConfigData,
     ImageConfigData, MetricsConfigData, TableConfigData
+)
+from ..models.extraction_models import (
+    TableExtraction, TextBoxExtraction, MetricsExtraction,
+    ChartExtraction, ImageExtraction
 )
 from ..canvas.state_manager import StateManager
 from ..services.atomic_client import AtomicClient, AtomicContext
@@ -30,6 +42,146 @@ from ..services.layout_service_client import LayoutServiceClient, SlideContent
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/chat", tags=["chat"])
+
+# Type variable for config models
+T = TypeVar('T', bound=BaseModel)
+
+
+def merge_configs(
+    llm_extracted: Dict[str, Any],
+    user_config: Optional[T],
+    config_class: Type[T]
+) -> T:
+    """
+    Merge LLM-extracted parameters with user's Advanced settings.
+
+    Priority (highest to lowest):
+    1. User's explicit Advanced settings (if user_config provided and field is not None)
+    2. LLM-extracted parameters (if not None)
+    3. Model defaults
+
+    Args:
+        llm_extracted: Parameters extracted by LLM from user's text
+        user_config: User's explicit config from Advanced UI (can be None)
+        config_class: The Pydantic model class to create
+
+    Returns:
+        Merged config object with all parameters resolved
+    """
+    # Start with defaults from the model class
+    result_dict = {}
+
+    # Apply LLM-extracted values (non-null only)
+    for key, value in llm_extracted.items():
+        if value is not None:
+            result_dict[key] = value
+
+    # Apply user config values (these override LLM extraction)
+    if user_config:
+        user_dict = user_config.model_dump()
+        for key, value in user_dict.items():
+            if value is not None:
+                result_dict[key] = value
+
+    # Create the config object (Pydantic will apply remaining defaults)
+    try:
+        return config_class(**result_dict)
+    except Exception as e:
+        logger.warning(f"[CHAT] Error creating {config_class.__name__}: {e}")
+        # Fall back to user config or defaults
+        return user_config if user_config else config_class()
+
+
+async def extract_and_merge_config(
+    message: str,
+    component_type: str,
+    user_config: Optional[T],
+    config_class: Type[T],
+    llm: LLMService,
+    fallback_infer_func
+) -> Tuple[T, Optional[int]]:
+    """
+    Extract parameters using specialized LLM extractors and merge with user config.
+
+    v2.1: Uses Pydantic structured output for guaranteed type safety.
+    Each extractor has focused prompts that understand component-specific semantics:
+    - TABLE: "6 rows" is structural (rows=6), NOT count
+    - TEXT_BOX: "5 bullet points" is items_per_instance (items_per_instance=5), NOT count
+    - METRICS: "3 metrics" is count (count=3)
+
+    Falls back to keyword-based inference if LLM extraction fails.
+
+    Args:
+        message: User's natural language message
+        component_type: Component type (METRICS, TABLE, TEXT_BOX, CHART, IMAGE)
+        user_config: User's explicit config from Advanced UI
+        config_class: The Pydantic model class to create
+        llm: LLM service instance
+        fallback_infer_func: Fallback function for keyword-based inference
+
+    Returns:
+        Tuple of (merged config, extracted count or None)
+    """
+    try:
+        # Use specialized extractors based on component type (v2.1)
+        # These now use Pydantic structured output internally
+        component_upper = component_type.upper()
+        if component_upper == "TABLE":
+            llm_extracted = await llm.extract_table_params(message)
+        elif component_upper == "TEXT_BOX":
+            llm_extracted = await llm.extract_textbox_params(message)
+        elif component_upper == "METRICS":
+            llm_extracted = await llm.extract_metrics_params(message)
+        elif component_upper == "CHART":
+            llm_extracted = await llm.extract_chart_params(message)
+        elif component_upper == "IMAGE":
+            llm_extracted = await llm.extract_image_params(message)
+        else:
+            # Fallback to generic extraction for unknown types
+            llm_extracted = await llm.extract_parameters(message, component_type)
+
+        # Extract count before merging (count is not in config classes)
+        extracted_count = llm_extracted.get("count")
+
+        # Log extraction results with component-specific context
+        non_null_params = {k: v for k, v in llm_extracted.items() if v is not None}
+        logger.info(
+            f"[CHAT] v2.1 Pydantic extraction for {component_type}: "
+            f"count={extracted_count}, params={list(non_null_params.keys())}"
+        )
+
+        # For TABLE, log structural dimensions separately from count
+        if component_upper == "TABLE":
+            rows = llm_extracted.get("rows")
+            cols = llm_extracted.get("columns")
+            if rows or cols:
+                logger.info(f"[CHAT] TABLE structural: rows={rows}, columns={cols} (distinct from count)")
+
+        # For TEXT_BOX, log items_per_instance separately from count
+        if component_upper == "TEXT_BOX":
+            items = llm_extracted.get("items_per_instance")
+            if items:
+                logger.info(f"[CHAT] TEXT_BOX items_per_instance={items} (distinct from count)")
+
+        # Merge with user config (user settings take priority)
+        config = merge_configs(llm_extracted, user_config, config_class)
+        return config, extracted_count
+
+    except Exception as e:
+        logger.warning(f"[CHAT] LLM extraction failed for {component_type}: {e}, falling back to keywords")
+        # Fall back to keyword-based inference
+        keyword_config = fallback_infer_func(message.lower())
+
+        # Still apply user overrides if provided
+        if user_config:
+            user_dict = user_config.model_dump()
+            keyword_dict = keyword_config.model_dump()
+            for key, value in user_dict.items():
+                if value is not None:
+                    keyword_dict[key] = value
+            return config_class(**keyword_dict), None
+
+        return keyword_config, None
 
 
 def _get_placeholder_mode(intent: Intent) -> bool:
@@ -107,10 +259,34 @@ def get_layout_service_client() -> LayoutServiceClient:
     return layout_service_client
 
 
+def get_or_load_presentation_id(session_id: str, sm: StateManager) -> Optional[str]:
+    """Get presentation_id from cache or load from session file."""
+    if session_id in session_presentations:
+        return session_presentations[session_id]
+
+    presentation_id = sm.get_presentation_id(session_id)
+    if presentation_id:
+        session_presentations[session_id] = presentation_id
+        logger.info(f"[CHAT] Loaded presentation_id {presentation_id} from session {session_id}")
+
+    return presentation_id
+
+
+def save_presentation_id(session_id: str, presentation_id: str, sm: StateManager) -> None:
+    """Save presentation_id to cache and persistent session storage."""
+    session_presentations[session_id] = presentation_id
+    sm.set_presentation_id(session_id, presentation_id)
+    logger.info(f"[CHAT] Saved presentation_id {presentation_id} for session {session_id}")
+
+
 class ChatRequest(BaseModel):
     """Request for chat message."""
     session_id: str
     message: str
+    debug: bool = False  # v2.1: Enable debug mode to see extraction without calling atomic API
+    # v2.2: Advanced mode fields - when provided, skip LLM parsing entirely
+    component_type: Optional[str] = None  # Required when using advanced settings (e.g., "TABLE", "TEXT_BOX")
+    count: Optional[int] = None  # Number of component instances to create
     image_config: Optional[ImageConfigData] = None  # Direct config for IMAGE (bypasses NLP parsing)
     # Position config for TEXT_BOX, METRICS, TABLE (bypasses NLP parsing)
     position_config: Optional[Dict[str, int]] = None  # {start_col, start_row, position_width, position_height}
@@ -118,6 +294,98 @@ class ChatRequest(BaseModel):
     metrics_config: Optional[MetricsConfigData] = None
     table_config: Optional[TableConfigData] = None
     chart_config: Optional[ChartConfigData] = None  # Direct config for CHART (bypasses NLP parsing)
+
+
+def has_advanced_config(request: ChatRequest) -> bool:
+    """
+    Check if user provided any advanced styling configuration.
+
+    NOTE: This does NOT check for component_type - that's handled separately
+    as a DETERMINISTIC route (Priority 1) before this function is called.
+
+    This function checks for styling configs (*_config objects) which indicate
+    the user modified Advanced Settings in the modal.
+
+    Args:
+        request: The chat request to check
+
+    Returns:
+        True if any styling config is provided, False otherwise
+    """
+    return any([
+        request.table_config,
+        request.textbox_config,
+        request.metrics_config,
+        request.chart_config,
+        request.image_config
+    ])
+
+
+def build_intent_from_configs(request: ChatRequest) -> Intent:
+    """
+    Build Intent directly from user-provided configs (no LLM).
+
+    v2.2: Fast path - when user provides advanced settings, we skip
+    LLM parsing entirely and construct the intent from their explicit configs.
+
+    Args:
+        request: Chat request with advanced configs
+
+    Returns:
+        Intent built from the provided configs
+    """
+    # Determine component type from explicit field or infer from whichever config is provided
+    component_type = None
+    if request.component_type:
+        try:
+            component_type = ComponentType(request.component_type.upper())
+        except ValueError:
+            # Try lowercase
+            try:
+                component_type = ComponentType(request.component_type.lower())
+            except ValueError:
+                pass
+
+    # Fallback: infer from which config is provided
+    if not component_type:
+        if request.table_config:
+            component_type = ComponentType.TABLE
+        elif request.textbox_config:
+            component_type = ComponentType.TEXT_BOX
+        elif request.metrics_config:
+            component_type = ComponentType.METRICS
+        elif request.chart_config:
+            component_type = ComponentType.CHART
+        elif request.image_config:
+            component_type = ComponentType.IMAGE
+
+    return Intent(
+        action=ActionType.ADD,
+        component_type=component_type,
+        count=request.count or 1,
+        content_prompt=request.message,
+        table_config=request.table_config,
+        textbox_config=request.textbox_config,
+        metrics_config=request.metrics_config,
+        chart_config=request.chart_config,
+        image_config=request.image_config,
+        confidence=1.0  # High confidence since user explicitly specified
+    )
+
+
+class DebugInfo(BaseModel):
+    """
+    Debug information for extraction testing (v2.1).
+
+    Shows what the LLM extracted and what would be sent to atomic API,
+    without actually making the API call. Useful for debugging extraction issues.
+    """
+    raw_llm_response: Optional[str] = None  # What the intent parsing LLM returned
+    llm_parse_error: Optional[str] = None   # Why JSON parsing failed (if it did)
+    fallback_used: Optional[str] = None     # Which parser was used (parse_intent_simple, etc.)
+    parsed_intent: Optional[Dict[str, Any]] = None  # Intent extracted from message
+    extracted_params: Optional[Dict[str, Any]] = None  # Parameters from specialized extractor
+    would_send_to_atomic: Optional[Dict[str, Any]] = None  # What WOULD be sent to atomic endpoint
 
 
 class ChatResponse(BaseModel):
@@ -130,6 +398,7 @@ class ChatResponse(BaseModel):
     viewer_url: Optional[str] = None
     suggestions: List[str] = Field(default_factory=list)
     error: Optional[str] = None
+    debug: Optional[DebugInfo] = None  # v2.1: Debug info when debug=True
 
 
 def parse_intent_simple(message: str) -> Intent:
@@ -209,18 +478,65 @@ def parse_intent_simple(message: str) -> Intent:
         component_type = ComponentType.TEXT_BOX
         textbox_config = infer_textbox_config(message_lower)
 
-    # Extract count (look for numbers)
+    # Extract count (look for numbers) - v2.1: Context-aware extraction
+    # CRITICAL: Don't extract count from structural dimensions
+    # - TABLE: "6 rows" or "3 columns" are structural, NOT count
+    # - TEXT_BOX: "5 bullet points" or "4 items" are items_per_instance, NOT count
     count = None
     words = message_lower.split()
+
+    # Words that indicate the number is structural, not count
+    structural_indicators = {
+        "rows", "row", "columns", "column", "cols", "col",  # TABLE structural
+        "bullets", "bullet", "points", "point", "items", "item",  # TEXT_BOX items
+        "chars", "characters",  # Character limits
+    }
+
+    # Words that indicate the number IS count (instance count)
+    count_indicators = {
+        "tables", "table",  # TABLE count
+        "boxes", "box", "sections", "section",  # TEXT_BOX count
+        "metrics", "metric", "kpis", "kpi",  # METRICS count
+        "charts", "chart",  # CHART count
+        "images", "image", "photos", "photo",  # IMAGE count
+    }
+
+    number_words = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6}
+
     for i, word in enumerate(words):
+        num_value = None
+
         if word.isdigit():
-            count = int(word)
-            break
-        # Check for number words
-        number_words = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6}
-        if word in number_words:
-            count = number_words[word]
-            break
+            num_value = int(word)
+        elif word in number_words:
+            num_value = number_words[word]
+
+        if num_value is not None:
+            # Check next word for context
+            next_word = words[i + 1] if i + 1 < len(words) else ""
+
+            # If followed by structural indicator, skip (not count)
+            if next_word in structural_indicators:
+                continue
+
+            # If followed by count indicator, this IS count
+            if next_word in count_indicators:
+                count = num_value
+                break
+
+            # For ambiguous cases, only set count if it's a reasonable value
+            # and we haven't found a better match yet
+            if count is None and num_value <= 6:
+                # Check if this might be structural based on component type
+                if component_type == ComponentType.TABLE:
+                    # For TABLE, only accept as count if explicitly followed by "table(s)"
+                    continue
+                elif component_type == ComponentType.TEXT_BOX:
+                    # For TEXT_BOX, only accept as count if explicitly followed by count indicator
+                    continue
+                else:
+                    count = num_value
+                    break
 
     return Intent(
         action=action,
@@ -472,6 +788,27 @@ def infer_table_config(message: str) -> TableConfigData:
     config = TableConfigData()
     msg = message.lower()
 
+    # v2.1: Extract rows and columns from message (structural dimensions)
+    # e.g., "6 rows" → rows=6, "3 columns" → columns=3
+    number_words = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+                    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10}
+
+    # Extract rows: "6 rows", "six rows", "6 data rows"
+    rows_match = re.search(r'(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:data\s+)?rows?', msg)
+    if rows_match:
+        rows_val = rows_match.group(1)
+        config.rows = int(rows_val) if rows_val.isdigit() else number_words.get(rows_val, None)
+        if config.rows and (config.rows < 2 or config.rows > 15):
+            config.rows = max(2, min(15, config.rows))  # Clamp to valid range
+
+    # Extract columns: "3 columns", "three columns"
+    cols_match = re.search(r'(\d+|one|two|three|four|five|six|seven|eight)\s+columns?', msg)
+    if cols_match:
+        cols_val = cols_match.group(1)
+        config.columns = int(cols_val) if cols_val.isdigit() else number_words.get(cols_val, None)
+        if config.columns and (config.columns < 2 or config.columns > 8):
+            config.columns = max(2, min(8, config.columns))  # Clamp to valid range
+
     # Detect header color (must be before header style detection)
     color_keywords = {
         "purple": "purple", "violet": "purple",
@@ -485,8 +822,9 @@ def infer_table_config(message: str) -> TableConfigData:
         "teal": "teal", "turquoise": "teal",
         "indigo": "indigo"
     }
+    # Check for color followed by "header", "table", or standalone before "table"
     for keyword, color in color_keywords.items():
-        if f"{keyword} header" in msg or f"{keyword} table" in msg:
+        if f"{keyword} header" in msg or f"{keyword} table" in msg or keyword in msg:
             config.header_color = color
             break
 
@@ -619,10 +957,11 @@ def infer_image_config(message: str) -> ImageConfigData:
     elif any(kw in msg for kw in ["bottom right", "lower right"]):
         config.grid_row = "11/18"
         config.grid_column = "17/32"
-    # Default position (full width)
+    # Default position - NOT full page, use 16:9 aspect ratio (12 cols x 7 rows)
     else:
-        config.grid_row = "4/18"
-        config.grid_column = "2/32"
+        config.grid_row = "4/11"       # 7 rows (rows 4-10 inclusive = 7 height)
+        config.grid_column = "2/14"    # 12 cols (cols 2-13 inclusive = 12 width)
+        config.aspect_ratio = "16:9"   # Default aspect ratio
 
     # Detect aspect ratio
     if any(kw in msg for kw in ["square", "1:1"]):
@@ -643,70 +982,200 @@ def infer_image_config(message: str) -> ImageConfigData:
     return config
 
 
-async def parse_intent_llm(message: str, llm: LLMService) -> Intent:
+class ParseResult(BaseModel):
+    """Result from parse_intent_llm with optional debug info."""
+    intent: Intent
+    debug_info: Optional[DebugInfo] = None
+
+
+async def parse_intent_llm(
+    message: str,
+    llm: LLMService,
+    user_textbox_config: Optional[TextBoxConfigData] = None,
+    user_metrics_config: Optional[MetricsConfigData] = None,
+    user_table_config: Optional[TableConfigData] = None,
+    user_chart_config: Optional[ChartConfigData] = None,
+    user_image_config: Optional[ImageConfigData] = None,
+    capture_debug: bool = False
+) -> Union[Intent, ParseResult]:
     """
-    Parse intent using LLM.
+    Parse intent using LLM with comprehensive parameter extraction.
+
+    v2.1: Uses LLM to extract ALL component parameters from natural language,
+    then merges with user's Advanced settings (user settings take priority).
 
     Args:
         message: User message
         llm: LLM service
+        user_*_config: Optional user-provided configs from Advanced UI
+        capture_debug: If True, returns ParseResult with debug info
 
     Returns:
-        Parsed Intent
+        Parsed Intent with LLM-extracted + user-merged configs,
+        or ParseResult if capture_debug=True
     """
+    # Initialize debug info if capturing
+    debug_info = DebugInfo() if capture_debug else None
+
+    # First, get intent (action, component type) via LLM
     response = await llm.parse_intent(message)
+
+    # Capture raw LLM response for debugging
+    if debug_info:
+        debug_info.raw_llm_response = response.content if response.success else None
+
+    # Initialize variables for both success and fallback paths
+    component_type = None
+    intent_data = {"action": "add", "content_prompt": message}
+    used_fallback = False
 
     if not response.success:
         logger.warning(f"[CHAT] LLM intent parsing failed: {response.error}")
-        return parse_intent_simple(message)
+        if debug_info:
+            debug_info.llm_parse_error = response.error
+            debug_info.fallback_used = "parse_intent_simple"
+        # Use fallback but still try specialized extractors
+        fallback_intent = parse_intent_simple(message)
+        component_type = fallback_intent.component_type
+        intent_data = {"action": fallback_intent.action.value, "content_prompt": message, "count": fallback_intent.count}
+        used_fallback = True
+    else:
+        try:
+            # Parse JSON response
+            intent_data = json.loads(response.content)
 
-    try:
-        # Parse JSON response
-        intent_data = json.loads(response.content)
+            # Map component type string to enum
+            if intent_data.get("component_type"):
+                try:
+                    component_type = ComponentType(intent_data["component_type"])
+                except ValueError:
+                    pass
 
-        # Map component type string to enum
-        component_type = None
-        if intent_data.get("component_type"):
-            try:
-                component_type = ComponentType(intent_data["component_type"])
-            except ValueError:
-                pass
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.warning(f"[CHAT] Failed to parse LLM response: {e}")
+            if debug_info:
+                debug_info.llm_parse_error = str(e)
+                debug_info.fallback_used = "parse_intent_simple"
+            # Use fallback
+            fallback_intent = parse_intent_simple(message)
+            component_type = fallback_intent.component_type
+            intent_data = {"action": fallback_intent.action.value, "content_prompt": message, "count": fallback_intent.count}
+            used_fallback = True
 
-        # Infer component configs from message keywords (same as parse_intent_simple)
-        table_config = None
-        textbox_config = None
-        metrics_config = None
-        chart_config = None
-        image_config = None
+    # Capture parsed intent for debugging
+    if debug_info:
+        debug_info.parsed_intent = {
+            "action": intent_data.get("action"),
+            "component_type": component_type.value if component_type else None,
+            "count": intent_data.get("count"),
+            "content_prompt": intent_data.get("content_prompt"),
+            "position_hint": intent_data.get("position_hint"),
+            "confidence": intent_data.get("confidence"),
+            "used_fallback": used_fallback
+        }
 
-        if component_type == ComponentType.TABLE:
-            table_config = infer_table_config(message.lower())
-        elif component_type == ComponentType.TEXT_BOX:
-            textbox_config = infer_textbox_config(message.lower())
-        elif component_type == ComponentType.METRICS:
-            metrics_config = infer_metrics_config(message.lower())
-        elif component_type == ComponentType.CHART:
-            chart_config = infer_chart_config(message.lower())
-        elif component_type == ComponentType.IMAGE:
-            image_config = infer_image_config(message.lower())
+    # Extract comprehensive parameters using LLM specialized extractors
+    # v2.1: Specialized extractors understand component-specific semantics
+    # (e.g., "6 rows" is structural for TABLE, not count)
+    table_config = None
+    textbox_config = None
+    metrics_config = None
+    chart_config = None
+    image_config = None
+    specialized_count = None  # Count from specialized extractor (overrides intent parsing)
 
-        return Intent(
-            action=ActionType(intent_data.get("action", "add")),
-            component_type=component_type,
-            count=intent_data.get("count"),
-            content_prompt=intent_data.get("content_prompt", message),
-            position_hint=intent_data.get("position_hint"),
-            confidence=intent_data.get("confidence", 0.9),
-            table_config=table_config,
-            textbox_config=textbox_config,
-            metrics_config=metrics_config,
-            chart_config=chart_config,
-            image_config=image_config
+    if component_type == ComponentType.TABLE:
+        table_config, specialized_count = await extract_and_merge_config(
+            message=message,
+            component_type="TABLE",
+            user_config=user_table_config,
+            config_class=TableConfigData,
+            llm=llm,
+            fallback_infer_func=infer_table_config
         )
+        logger.info(f"[CHAT] TABLE config: rows={table_config.rows}, columns={table_config.columns}, specialized_count={specialized_count}")
 
-    except (json.JSONDecodeError, KeyError) as e:
-        logger.warning(f"[CHAT] Failed to parse LLM response: {e}")
-        return parse_intent_simple(message)
+    elif component_type == ComponentType.TEXT_BOX:
+        textbox_config, specialized_count = await extract_and_merge_config(
+            message=message,
+            component_type="TEXT_BOX",
+            user_config=user_textbox_config,
+            config_class=TextBoxConfigData,
+            llm=llm,
+            fallback_infer_func=infer_textbox_config
+        )
+        logger.info(f"[CHAT] TEXT_BOX config: items_per_instance={textbox_config.items_per_instance}, list_style={textbox_config.list_style}, specialized_count={specialized_count}")
+
+    elif component_type == ComponentType.METRICS:
+        metrics_config, specialized_count = await extract_and_merge_config(
+            message=message,
+            component_type="METRICS",
+            user_config=user_metrics_config,
+            config_class=MetricsConfigData,
+            llm=llm,
+            fallback_infer_func=infer_metrics_config
+        )
+        logger.info(f"[CHAT] METRICS config: color_scheme={metrics_config.color_scheme}, layout={metrics_config.layout}, specialized_count={specialized_count}")
+
+    elif component_type == ComponentType.CHART:
+        chart_config, specialized_count = await extract_and_merge_config(
+            message=message,
+            component_type="CHART",
+            user_config=user_chart_config,
+            config_class=ChartConfigData,
+            llm=llm,
+            fallback_infer_func=infer_chart_config
+        )
+        logger.info(f"[CHAT] CHART config: chart_type={chart_config.chart_type}, include_insights={chart_config.include_insights}, specialized_count={specialized_count}")
+
+    elif component_type == ComponentType.IMAGE:
+        image_config, specialized_count = await extract_and_merge_config(
+            message=message,
+            component_type="IMAGE",
+            user_config=user_image_config,
+            config_class=ImageConfigData,
+            llm=llm,
+            fallback_infer_func=infer_image_config
+        )
+        logger.info(f"[CHAT] IMAGE config: style={image_config.style}, quality={image_config.quality}, specialized_count={specialized_count}")
+
+    # Use specialized_count if available, otherwise fall back to intent_data count
+    # This ensures "6 rows" doesn't become count=6 for TABLE
+    final_count = specialized_count if specialized_count is not None else intent_data.get("count")
+
+    # Capture extracted params for debugging
+    if debug_info:
+        extracted = {}
+        if table_config:
+            extracted = table_config.model_dump()
+        elif textbox_config:
+            extracted = textbox_config.model_dump()
+        elif metrics_config:
+            extracted = metrics_config.model_dump()
+        elif chart_config:
+            extracted = chart_config.model_dump()
+        elif image_config:
+            extracted = image_config.model_dump()
+        # Remove None values for cleaner output
+        debug_info.extracted_params = {k: v for k, v in extracted.items() if v is not None}
+
+    intent = Intent(
+        action=ActionType(intent_data.get("action", "add")),
+        component_type=component_type,
+        count=final_count,
+        content_prompt=intent_data.get("content_prompt", message),
+        position_hint=intent_data.get("position_hint"),
+        confidence=intent_data.get("confidence", 0.9),
+        table_config=table_config,
+        textbox_config=textbox_config,
+        metrics_config=metrics_config,
+        chart_config=chart_config,
+        image_config=image_config
+    )
+
+    if capture_debug:
+        return ParseResult(intent=intent, debug_info=debug_info)
+    return intent
 
 
 @router.post("/message", response_model=ChatResponse)
@@ -749,12 +1218,244 @@ async def send_message(
     sm.add_chat_message(session_id, ChatRole.USER, message)
 
     try:
-        # Parse intent (try LLM, fallback to rules)
-        intent = await parse_intent_llm(message, llm)
+        # =====================================================================
+        # ARCHITECTURAL RULE: Component Type Routing is DETERMINISTIC
+        # =====================================================================
+        # When user clicks a toolbar button (Text Box, Table, Chart, etc.),
+        # the component_type is ALREADY DECIDED. No LLM should ever override this.
+        #
+        # ROUTING PRIORITIES:
+        # 1. component_type provided + advanced config → Use config directly (skip LLM)
+        # 2. component_type provided + NO advanced config → FIXED type, extract config via LLM
+        # 3. NO component_type → This should NOT happen from toolbar (error/fallback)
+        #
+        # LLM Role: Extract CONFIGURATION only (rows, columns, colors, etc.)
+        # LLM NOT Role: Determine component type (that comes from button click)
+        # =====================================================================
+        debug_info = None
+
+        # PRIORITY 1: component_type provided (toolbar button click)
+        # Component type is SACRED - 100% deterministic routing
+        if request.component_type:
+            # Parse the component type from request (this is FIXED, user clicked a button)
+            try:
+                component_type = ComponentType(request.component_type.upper())
+            except ValueError:
+                try:
+                    component_type = ComponentType(request.component_type.lower())
+                except ValueError:
+                    logger.error(f"[CHAT] Invalid component_type: {request.component_type}")
+                    return ChatResponse(
+                        success=False,
+                        response_text=f"Unknown component type: {request.component_type}",
+                        error=f"Invalid component_type: {request.component_type}"
+                    )
+
+            logger.info(f"[CHAT] DETERMINISTIC ROUTE: User clicked {component_type.value} button")
+
+            # Check if user provided advanced config (styling options)
+            if has_advanced_config(request):
+                # CASE 1A: component_type + advanced config → Skip LLM entirely
+                logger.info(f"[CHAT] Advanced config provided - using direct config (no LLM)")
+                intent = build_intent_from_configs(request)
+
+                if request.debug:
+                    debug_info = DebugInfo(
+                        fallback_used="deterministic_advanced_config",
+                        parsed_intent={
+                            "action": intent.action.value,
+                            "component_type": intent.component_type.value if intent.component_type else None,
+                            "count": intent.count,
+                            "content_prompt": intent.content_prompt,
+                            "mode": "deterministic + advanced config (LLM skipped)"
+                        }
+                    )
+            else:
+                # CASE 1B: component_type + NO advanced config → Extract config via LLM
+                # Component type is FIXED, but we parse configuration from user's text
+                logger.info(f"[CHAT] Extracting {component_type.value} config from message (type is FIXED)")
+
+                # Use component-specific extractors (these extract CONFIG, not component type)
+                extracted_params = {}
+                extracted_count = None
+
+                if component_type == ComponentType.TABLE:
+                    extracted_params, extracted_count = await extract_and_merge_config(
+                        message=message,
+                        component_type="TABLE",
+                        user_config=request.table_config,
+                        config_class=TableConfigData,
+                        llm=llm,
+                        fallback_infer_func=infer_table_config
+                    )
+                    table_config = extracted_params
+                    textbox_config = None
+                    metrics_config = None
+                    chart_config = None
+                    image_config = None
+
+                elif component_type == ComponentType.TEXT_BOX:
+                    extracted_params, extracted_count = await extract_and_merge_config(
+                        message=message,
+                        component_type="TEXT_BOX",
+                        user_config=request.textbox_config,
+                        config_class=TextBoxConfigData,
+                        llm=llm,
+                        fallback_infer_func=infer_textbox_config
+                    )
+                    textbox_config = extracted_params
+                    table_config = None
+                    metrics_config = None
+                    chart_config = None
+                    image_config = None
+
+                elif component_type == ComponentType.METRICS:
+                    extracted_params, extracted_count = await extract_and_merge_config(
+                        message=message,
+                        component_type="METRICS",
+                        user_config=request.metrics_config,
+                        config_class=MetricsConfigData,
+                        llm=llm,
+                        fallback_infer_func=infer_metrics_config
+                    )
+                    metrics_config = extracted_params
+                    table_config = None
+                    textbox_config = None
+                    chart_config = None
+                    image_config = None
+
+                elif component_type == ComponentType.CHART:
+                    extracted_params, extracted_count = await extract_and_merge_config(
+                        message=message,
+                        component_type="CHART",
+                        user_config=request.chart_config,
+                        config_class=ChartConfigData,
+                        llm=llm,
+                        fallback_infer_func=infer_chart_config
+                    )
+                    chart_config = extracted_params
+                    table_config = None
+                    textbox_config = None
+                    metrics_config = None
+                    image_config = None
+
+                elif component_type == ComponentType.IMAGE:
+                    extracted_params, extracted_count = await extract_and_merge_config(
+                        message=message,
+                        component_type="IMAGE",
+                        user_config=request.image_config,
+                        config_class=ImageConfigData,
+                        llm=llm,
+                        fallback_infer_func=infer_image_config
+                    )
+                    image_config = extracted_params
+                    table_config = None
+                    textbox_config = None
+                    metrics_config = None
+                    chart_config = None
+
+                else:
+                    # Unknown component type - shouldn't happen with valid enum
+                    table_config = None
+                    textbox_config = None
+                    metrics_config = None
+                    chart_config = None
+                    image_config = None
+
+                # Build intent with FIXED component type and extracted config
+                intent = Intent(
+                    action=ActionType.ADD,
+                    component_type=component_type,  # FIXED - never changes
+                    count=request.count or extracted_count or 1,
+                    content_prompt=message,
+                    table_config=table_config,
+                    textbox_config=textbox_config,
+                    metrics_config=metrics_config,
+                    chart_config=chart_config,
+                    image_config=image_config,
+                    confidence=1.0  # High confidence - deterministic routing
+                )
+
+                if request.debug:
+                    extracted_dict = {}
+                    if extracted_params:
+                        extracted_dict = extracted_params.model_dump() if hasattr(extracted_params, 'model_dump') else {}
+                    debug_info = DebugInfo(
+                        fallback_used="deterministic_with_config_extraction",
+                        parsed_intent={
+                            "action": intent.action.value,
+                            "component_type": intent.component_type.value,
+                            "count": intent.count,
+                            "content_prompt": intent.content_prompt,
+                            "mode": "deterministic (type FIXED, config extracted via LLM)"
+                        },
+                        extracted_params={k: v for k, v in extracted_dict.items() if v is not None}
+                    )
+
+        # PRIORITY 2: NO component_type provided
+        # This should be rare - frontend should always send component_type when user clicks a button
+        # This path is only for free-form chat without toolbar button click
+        else:
+            logger.warning("[CHAT] No component_type provided - this should be rare")
+            logger.info("[CHAT] Using full LLM parsing (component type detection + config extraction)")
+            parse_result = await parse_intent_llm(
+                message=message,
+                llm=llm,
+                user_textbox_config=request.textbox_config,
+                user_metrics_config=request.metrics_config,
+                user_table_config=request.table_config,
+                user_chart_config=request.chart_config,
+                user_image_config=request.image_config,
+                capture_debug=request.debug
+            )
+
+            # Handle ParseResult vs Intent return types
+            if request.debug and isinstance(parse_result, ParseResult):
+                intent = parse_result.intent
+                debug_info = parse_result.debug_info
+            else:
+                intent = parse_result
+
         logger.info(f"[CHAT] Parsed intent: action={intent.action}, type={intent.component_type}, count={intent.count}")
 
+        # v2.1: Debug mode - return extraction details without calling atomic API
+        if request.debug:
+            # Build what WOULD be sent to atomic API
+            config = COMPONENT_CONFIG.get(intent.component_type, {}) if intent.component_type else {}
+            count = intent.count or config.get("default_count", 1)
+
+            atomic_payload = {
+                "count": count,
+                "content_prompt": intent.content_prompt
+            }
+
+            # Add component-specific config
+            if intent.table_config:
+                atomic_payload["table_config"] = {k: v for k, v in intent.table_config.model_dump().items() if v is not None}
+            if intent.textbox_config:
+                atomic_payload["textbox_config"] = {k: v for k, v in intent.textbox_config.model_dump().items() if v is not None}
+            if intent.metrics_config:
+                atomic_payload["metrics_config"] = {k: v for k, v in intent.metrics_config.model_dump().items() if v is not None}
+            if intent.chart_config:
+                atomic_payload["chart_config"] = {k: v for k, v in intent.chart_config.model_dump().items() if v is not None}
+            if intent.image_config:
+                atomic_payload["image_config"] = {k: v for k, v in intent.image_config.model_dump().items() if v is not None}
+
+            if debug_info:
+                debug_info.would_send_to_atomic = {
+                    "endpoint": f"/v1.2/atomic/{intent.component_type.value}" if intent.component_type else None,
+                    "payload": atomic_payload
+                }
+
+            return ChatResponse(
+                success=True,
+                response_text="Debug mode: extraction details in debug object. No API calls made.",
+                action_taken="debug_only",
+                debug=debug_info
+            )
+
         # Get or create presentation for this session
-        presentation_id = session_presentations.get(session_id)
+        presentation_id = get_or_load_presentation_id(session_id, sm)
         viewer_url = None
 
         if not presentation_id:
@@ -763,8 +1464,7 @@ async def send_message(
             if result.success:
                 presentation_id = result.presentation_id
                 viewer_url = result.viewer_url
-                session_presentations[session_id] = presentation_id
-                logger.info(f"[CHAT] Created presentation {presentation_id} for session {session_id}")
+                save_presentation_id(session_id, presentation_id, sm)
             else:
                 logger.error(f"[CHAT] Failed to create presentation: {result.error}")
         else:
@@ -777,7 +1477,7 @@ async def send_message(
             if result.success:
                 presentation_id = result.presentation_id
                 viewer_url = result.viewer_url
-                session_presentations[session_id] = presentation_id
+                save_presentation_id(session_id, presentation_id, sm)
 
             sm.clear_canvas(session_id)
             response_text = "Slide cleared. Ready for new elements."
@@ -824,7 +1524,7 @@ async def send_message(
 
             # Get component config
             config = COMPONENT_CONFIG.get(intent.component_type, {})
-            count = intent.count or config.get("default_count", 3)
+            count = intent.count or 1  # Default to 1 instance, not config default
 
             # Use single_size for count=1, default size otherwise
             if count == 1 and "single_size" in config:
@@ -856,7 +1556,7 @@ async def send_message(
                     if result.success:
                         presentation_id = result.presentation_id
                         viewer_url = result.viewer_url
-                        session_presentations[session_id] = presentation_id
+                        save_presentation_id(session_id, presentation_id, sm)
                     else:
                         return ChatResponse(
                             success=False,
@@ -938,18 +1638,29 @@ async def send_message(
 </html>'''
 
                 # Build position dict for canvas (similar to IMAGE handling)
-                chart_position = {}
+                # CRITICAL: Always provide default grid position for CHART
+                # Use grid_width/grid_height from COMPONENT_CONFIG as defaults
                 if chart_config.start_col is not None:
+                    # User provided position_config - use their values
                     start_col = chart_config.start_col
                     start_row = chart_config.start_row or 4
-                    width = chart_config.position_width or 14
-                    height = chart_config.position_height or 11
-                    chart_position["grid_row"] = f"{start_row}/{start_row + height}"
-                    chart_position["grid_column"] = f"{start_col}/{start_col + width}"
-                    chart_position["start_col"] = start_col
-                    chart_position["start_row"] = start_row
-                    chart_position["width"] = width
-                    chart_position["height"] = height
+                    width = chart_config.position_width or grid_width
+                    height = chart_config.position_height or grid_height
+                else:
+                    # No position provided - use defaults (content safe zone)
+                    start_col = 2  # Start at column 2
+                    start_row = 4  # Start at row 4
+                    width = grid_width   # From COMPONENT_CONFIG (16)
+                    height = grid_height  # From COMPONENT_CONFIG (12)
+
+                chart_position = {
+                    "grid_row": f"{start_row}/{start_row + height}",
+                    "grid_column": f"{start_col}/{start_col + width}",
+                    "start_col": start_col,
+                    "start_row": start_row,
+                    "width": width,
+                    "height": height
+                }
 
                 return ChatResponse(
                     success=True,
@@ -978,13 +1689,22 @@ async def send_message(
                 else:
                     image_config = intent.image_config or ImageConfigData()
 
+                # CRITICAL: Ensure grid_row/grid_column are set (image service requires them)
+                # Default to 16:9 aspect ratio (12×7 grids) positioned at top-left of content safe zone
+                if not image_config.grid_row:
+                    image_config.grid_row = "4/11"       # 7 rows starting at row 4
+                if not image_config.grid_column:
+                    image_config.grid_column = "2/14"   # 12 cols starting at col 2
+                if not image_config.aspect_ratio:
+                    image_config.aspect_ratio = "16:9"
+
                 # Create presentation if not exists (needed for slide_id)
                 if not presentation_id:
                     result = await lsc.create_presentation(canvas_state.slide_title or "Text Labs Slide")
                     if result.success:
                         presentation_id = result.presentation_id
                         viewer_url = result.viewer_url
-                        session_presentations[session_id] = presentation_id
+                        save_presentation_id(session_id, presentation_id, sm)
                     else:
                         return ChatResponse(
                             success=False,
@@ -1150,7 +1870,7 @@ async def send_message(
                 if result.success:
                     presentation_id = result.presentation_id
                     viewer_url = result.viewer_url
-                    session_presentations[session_id] = presentation_id
+                    save_presentation_id(session_id, presentation_id, sm)
                 else:
                     return ChatResponse(
                         success=False,
@@ -1182,6 +1902,33 @@ async def send_message(
                 suggestions=suggestions
             )
 
+            # CRITICAL FIX: Compute grid_position with CSS grid format for frontend
+            # The atomic_response.grid_position may not have grid_row/grid_column which
+            # the frontend needs. In basic chat mode, we compute these from grid dimensions.
+            # Advanced mode with position_config already sets these via the position handler.
+            if request.position_config:
+                # Advanced mode: use position_config values
+                pos = request.position_config
+                start_col = pos.get('start_col', 2)
+                start_row = pos.get('start_row', 4)
+                width = pos.get('position_width', grid_width)
+                height = pos.get('position_height', grid_height)
+            else:
+                # Basic chat mode: use default positioning in content safe zone
+                start_col = 2  # Start at column 2 (content safe zone)
+                start_row = 4  # Start at row 4 (content safe zone)
+                width = grid_width
+                height = grid_height
+
+            computed_position = {
+                "grid_row": f"{start_row}/{start_row + height}",
+                "grid_column": f"{start_col}/{start_col + width}",
+                "start_col": start_col,
+                "start_row": start_row,
+                "width": width,
+                "height": height
+            }
+
             return ChatResponse(
                 success=True,
                 response_text=response_text,
@@ -1190,7 +1937,7 @@ async def send_message(
                     "component_type": intent.component_type.value,
                     "html": atomic_response.html,
                     "variants_used": atomic_response.variants_used,
-                    "grid_position": atomic_response.grid_position  # Include grid position
+                    "grid_position": computed_position  # Use computed position with CSS grid format
                 },
                 presentation_id=presentation_id,
                 viewer_url=viewer_url,
@@ -1346,8 +2093,8 @@ async def create_or_get_presentation(
         sm.create_session(session_id)
         canvas_state = sm.get_canvas_state(session_id)
 
-    # Check if session already has a presentation
-    presentation_id = session_presentations.get(session_id)
+    # Check if session already has a presentation (loads from file if not in cache)
+    presentation_id = get_or_load_presentation_id(session_id, sm)
     viewer_url = None
 
     if presentation_id:
@@ -1360,8 +2107,7 @@ async def create_or_get_presentation(
         if result.success:
             presentation_id = result.presentation_id
             viewer_url = result.viewer_url
-            session_presentations[session_id] = presentation_id
-            logger.info(f"[CHAT] Created presentation {presentation_id} for session {session_id}")
+            save_presentation_id(session_id, presentation_id, sm)
         else:
             logger.error(f"[CHAT] Failed to create presentation: {result.error}")
             raise HTTPException(500, f"Failed to create presentation: {result.error}")
@@ -1385,8 +2131,8 @@ async def save_progress(
     if not canvas_state:
         raise HTTPException(404, f"Session not found: {session_id}")
 
-    # Get presentation ID if exists
-    presentation_id = session_presentations.get(session_id)
+    # Get presentation ID if exists (loads from file if not in cache)
+    presentation_id = get_or_load_presentation_id(session_id, sm)
 
     # Save session state (StateManager handles persistence)
     sm.save_session(session_id)

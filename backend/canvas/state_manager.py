@@ -193,6 +193,25 @@ class StateManager:
             }
         return None
 
+    def get_presentation_id(self, session_id: str) -> Optional[str]:
+        """Get the presentation_id for a session."""
+        session = self.get_session(session_id)
+        if session:
+            return session.get("presentation_id")
+        return None
+
+    def set_presentation_id(self, session_id: str, presentation_id: str) -> bool:
+        """Set the presentation_id for a session."""
+        session = self.get_session(session_id)
+        if not session:
+            self.create_session(session_id)
+            session = self.get_session(session_id)
+
+        session["presentation_id"] = presentation_id
+        session["updated_at"] = datetime.now().isoformat()
+        self._save_session(session_id)
+        return True
+
     def clear_canvas(self, session_id: str) -> bool:
         """Clear all elements from canvas (alias for clear_session)."""
         return self.clear_session(session_id)
