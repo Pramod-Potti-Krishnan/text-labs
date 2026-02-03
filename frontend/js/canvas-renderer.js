@@ -14,10 +14,30 @@ class CanvasRenderer {
         this.pendingMessages = [];
         this.currentScale = 0.75;
 
+        // API client and session for backend communication (set via setters)
+        this.api = null;
+        this.sessionId = null;
+
         this.setupMessageListener();
         this.setupResizeHandler();
         // Initial scale calculation
         setTimeout(() => this.updateScale(), 100);
+    }
+
+    /**
+     * Set the API client for backend communication
+     * @param {TextLabsAPI} api - API client instance
+     */
+    setApi(api) {
+        this.api = api;
+    }
+
+    /**
+     * Set the session ID for API calls
+     * @param {string} sessionId - Session ID
+     */
+    setSessionId(sessionId) {
+        this.sessionId = sessionId;
     }
 
     /**
@@ -464,7 +484,7 @@ class CanvasRenderer {
         this.sendCommand('insertDiagram', {
             id: id,
             slideIndex: 0,
-            diagramHtml: cleanHtml,
+            htmlContent: cleanHtml,
             gridRow: finalPosition.gridRow,
             gridColumn: finalPosition.gridColumn,
             positionWidth: width,
@@ -472,10 +492,6 @@ class CanvasRenderer {
             draggable: true,
             resizable: true
         });
-
-        // Force iframe to reload the presentation from Layout Service
-        // The diagram was already added by the backend, so reload shows it immediately
-        this.sendCommand('reloadPresentation', {});
 
         // Track locally with type indicator
         this.elements.push({
@@ -529,6 +545,31 @@ class CanvasRenderer {
 
         // Notify backend to free grid cells
         this.notifyElementRemoved(elementId);
+
+        // Persist deletion to backend state
+        this.persistElementDeletion(elementId);
+    }
+
+    /**
+     * Persist element deletion to backend
+     * Called when user deletes an element via the viewer (iframe)
+     * @param {string} elementId - Element ID to delete
+     */
+    async persistElementDeletion(elementId) {
+        // Use this.sessionId if set, otherwise fall back to sessionManager
+        const sessionId = this.sessionId || window.sessionManager?.getSessionId?.() || 'default';
+
+        if (!this.api) {
+            console.warn('[Canvas] Cannot persist deletion - API client not set');
+            return;
+        }
+
+        try {
+            await this.api.deleteElement(sessionId, elementId);
+            console.log('[Canvas] Element deletion persisted to backend:', elementId);
+        } catch (error) {
+            console.error('[Canvas] Failed to persist element deletion:', error);
+        }
     }
 
     /**
@@ -680,7 +721,17 @@ class CanvasRenderer {
 
                 case 'deleteElement':
                     if (success) {
-                        console.log('[Canvas] Element deleted:', elementId);
+                        console.log('[Canvas] Element deleted from viewer:', elementId);
+
+                        // 1. Remove from local tracking
+                        this.elements = this.elements.filter(e => e.id !== elementId);
+                        this.updateElementCount();
+
+                        // 2. Free occupancy cells in backend
+                        this.notifyElementRemoved(elementId);
+
+                        // 3. CRITICAL: Persist deletion to backend state
+                        this.persistElementDeletion(elementId);
                     }
                     break;
 

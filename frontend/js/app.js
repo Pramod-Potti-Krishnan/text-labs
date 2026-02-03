@@ -3,6 +3,18 @@
  * Orchestrates all components and handles user interactions
  */
 
+// Diagram types that should use insertDiagram()
+const DIAGRAM_TYPES = [
+    'CODE_DISPLAY',
+    'KANBAN_BOARD',
+    'GANTT_CHART',
+    'CHEVRON_MATURITY',
+    'IDEA_BOARD',
+    'CLOUD_ARCHITECTURE',
+    'LOGICAL_ARCHITECTURE',
+    'DATA_ARCHITECTURE'
+];
+
 class TextLabsApp {
     constructor() {
         // Initialize services
@@ -41,6 +53,10 @@ class TextLabsApp {
             // Check backend health
             await this.api.healthCheck();
             this.canvas.setConnectionStatus('connected');
+
+            // Wire up API client and session ID to canvas for deletion persistence
+            this.canvas.setApi(this.api);
+            this.canvas.setSessionId(this.session.id);
 
             // Get component info
             this.componentInfo = await this.api.getComponentInfo();
@@ -97,6 +113,10 @@ class TextLabsApp {
                             this.canvas.insertChart(element.html, position, element.element_id);
                         } else if (element.component_type === 'IMAGE') {
                             this.canvas.insertImage(element.html, element.grid_position, element.element_id);
+                        } else if (DIAGRAM_TYPES.includes(element.component_type)) {
+                            this.canvas.insertDiagram(element.html, position, element.element_id, {
+                                diagramType: element.component_type
+                            });
                         } else {
                             this.canvas.insertElement(element.html, position);
                         }
@@ -214,6 +234,13 @@ class TextLabsApp {
                         response.element.grid_position,
                         response.element.element_id
                     );
+                } else if (DIAGRAM_TYPES.includes(response.element.component_type)) {
+                    this.canvas.insertDiagram(
+                        response.element.html,
+                        position,
+                        response.element.element_id,
+                        { diagramType: response.element.component_type }
+                    );
                 } else {
                     this.canvas.insertElement(response.element.html, position);
                 }
@@ -281,16 +308,30 @@ class TextLabsApp {
      */
     async handleToolbarAdd(config) {
         console.log('[App] Toolbar add:', config);
+        console.log('[App] Advanced modified:', config.advancedModified);
 
-        // Build natural language message from config
-        const message = this.modal.buildMessage(config);
+        // Determine submission strategy based on advancedModified flag
+        // If user didn't modify Advanced settings, use text-only mode (LLM parsing)
+        // If user modified Advanced settings, use structured config mode
+        const useTextOnlyMode = !config.advancedModified;
 
-        // Show loading
-        this.setLoading(true);
+        let message;
+        let options = {};
 
-        try {
-            // Build options - pass configs directly to bypass NLP parsing for position
-            const options = {};
+        if (useTextOnlyMode) {
+            // TEXT-ONLY MODE: Send simple description, let backend LLM parse
+            // This uses parse_intent_simple() and infer_*_config() functions
+            message = config.prompt || `Add ${config.count} ${config.type.toLowerCase().replace('_', ' ')}`;
+            options.textOnlyMode = true;
+            options.componentType = config.type;
+            options.count = config.count;
+            console.log('[App] Using text-only mode with LLM parsing');
+        } else {
+            // STRUCTURED CONFIG MODE: Build detailed message and pass all configs
+            message = this.modal.buildMessage(config);
+            console.log('[App] Using structured config mode');
+
+            // Pass configs directly to bypass NLP parsing for position
             if (config.type === 'IMAGE' && config.imageConfig) {
                 options.imageConfig = config.imageConfig;
                 console.log('[App] Passing imageConfig directly:', config.imageConfig);
@@ -322,6 +363,53 @@ class TextLabsApp {
                 console.log('[App] Passing chartConfig directly:', config.chartConfig);
             }
 
+            // Pass diagram configs (Diagram Generator v3.0)
+            if (config.codeDisplayConfig) {
+                options.codeDisplayConfig = config.codeDisplayConfig;
+                options.componentType = config.type;
+                console.log('[App] Passing codeDisplayConfig:', config.codeDisplayConfig);
+            }
+            if (config.kanbanConfig) {
+                options.kanbanConfig = config.kanbanConfig;
+                options.componentType = config.type;
+                console.log('[App] Passing kanbanConfig:', config.kanbanConfig);
+            }
+            if (config.ganttConfig) {
+                options.ganttConfig = config.ganttConfig;
+                options.componentType = config.type;
+                console.log('[App] Passing ganttConfig:', config.ganttConfig);
+            }
+            if (config.chevronConfig) {
+                options.chevronConfig = config.chevronConfig;
+                options.componentType = config.type;
+                console.log('[App] Passing chevronConfig:', config.chevronConfig);
+            }
+            if (config.ideaBoardConfig) {
+                options.ideaBoardConfig = config.ideaBoardConfig;
+                options.componentType = config.type;
+                console.log('[App] Passing ideaBoardConfig:', config.ideaBoardConfig);
+            }
+            if (config.cloudArchitectureConfig) {
+                options.cloudArchitectureConfig = config.cloudArchitectureConfig;
+                options.componentType = config.type;
+                console.log('[App] Passing cloudArchitectureConfig:', config.cloudArchitectureConfig);
+            }
+            if (config.logicalArchitectureConfig) {
+                options.logicalArchitectureConfig = config.logicalArchitectureConfig;
+                options.componentType = config.type;
+                console.log('[App] Passing logicalArchitectureConfig:', config.logicalArchitectureConfig);
+            }
+            if (config.dataArchitectureConfig) {
+                options.dataArchitectureConfig = config.dataArchitectureConfig;
+                options.componentType = config.type;
+                console.log('[App] Passing dataArchitectureConfig:', config.dataArchitectureConfig);
+            }
+        }
+
+        // Show loading
+        this.setLoading(true);
+
+        try {
             // Send as chat message to leverage existing backend logic
             const response = await this.api.sendChatMessage(this.session.id, message, options);
             console.log('[App] Toolbar response:', response);
@@ -333,17 +421,43 @@ class TextLabsApp {
                     gridColumn: response.element.grid_position.grid_column
                 } : null;
 
+                // Check if auto_position was enabled in the request
+                // For non-IMAGE types, check position_config.auto_position
+                // For IMAGE type, check imageConfig.auto_position
+                const useAutoPosition = config.position_config?.auto_position === true ||
+                                        config.imageConfig?.auto_position === true;
+                const insertOptions = {
+                    useAutoPosition: useAutoPosition,
+                    positionWidth: config.position_config?.position_width || config.imageConfig?.position_width,
+                    positionHeight: config.position_config?.position_height || config.imageConfig?.position_height
+                };
+
+                if (useAutoPosition) {
+                    console.log('[App] Auto-position enabled, passing to canvas');
+                }
+
                 // Use appropriate insert method based on component type
                 if (response.element.component_type === 'CHART') {
-                    this.canvas.insertChart(response.element.html, position, response.element.element_id);
+                    this.canvas.insertChart(response.element.html, position, response.element.element_id, insertOptions);
                 } else if (response.element.component_type === 'IMAGE') {
                     this.canvas.insertImage(
                         response.element.html,
                         response.element.grid_position,
-                        response.element.element_id
+                        response.element.element_id,
+                        insertOptions
+                    );
+                } else if (DIAGRAM_TYPES.includes(response.element.component_type)) {
+                    this.canvas.insertDiagram(
+                        response.element.html,
+                        position,
+                        response.element.element_id,
+                        {
+                            ...insertOptions,
+                            diagramType: response.element.component_type
+                        }
                     );
                 } else {
-                    this.canvas.insertElement(response.element.html, position);
+                    this.canvas.insertElement(response.element.html, position, insertOptions);
                 }
 
                 // Also show success in chat
