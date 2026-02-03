@@ -60,6 +60,67 @@ class CanvasRenderer {
     }
 
     /**
+     * Get auto-calculated position from backend occupancy tracker.
+     * @param {string} elementId - Element ID
+     * @param {string} elementType - METRICS, CHART, TABLE, IMAGE, TEXT_BOX, etc.
+     * @param {number} width - Width in grid columns
+     * @param {number} height - Height in grid rows
+     * @returns {Promise<{gridRow: string, gridColumn: string}>}
+     */
+    async getAutoPosition(elementId, elementType, width, height) {
+        const sessionId = window.sessionManager?.getSessionId?.() || 'default';
+
+        try {
+            const response = await fetch('/api/position/auto', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    element_id: elementId,
+                    element_type: elementType,
+                    width: width,
+                    height: height
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Position API error: ${response.status}`);
+            }
+
+            const data = await response.json();
+            console.log('[Canvas] Backend auto-position:', data.grid_row, data.grid_column);
+            return {
+                gridRow: data.grid_row,
+                gridColumn: data.grid_column
+            };
+        } catch (error) {
+            console.error('[Canvas] Auto-position API failed, using fallback:', error);
+            // Fallback to default top-left position
+            return {
+                gridRow: `4/${4 + height}`,
+                gridColumn: `2/${2 + width}`
+            };
+        }
+    }
+
+    /**
+     * Notify backend when an element is removed (to free grid cells).
+     * @param {string} elementId - Element ID to remove from tracking
+     */
+    async notifyElementRemoved(elementId) {
+        const sessionId = window.sessionManager?.getSessionId?.() || 'default';
+
+        try {
+            await fetch(`/api/position/${sessionId}/elements/${elementId}`, {
+                method: 'DELETE'
+            });
+            console.log('[Canvas] Notified backend of element removal:', elementId);
+        } catch (error) {
+            console.warn('[Canvas] Failed to notify backend of removal:', error);
+        }
+    }
+
+    /**
      * Load presentation viewer in iframe
      * @param {string} viewerUrl - URL of the presentation viewer
      */
@@ -127,33 +188,58 @@ class CanvasRenderer {
 
     /**
      * Insert generated HTML as a text box element
+     * Uses backend auto-positioning when useAutoPosition is true.
      * @param {string} html - HTML content
      * @param {object} position - Grid position (optional)
+     * @param {object} options - Additional options including useAutoPosition
+     * @returns {Promise<string>} - Element ID
      */
-    insertElement(html, position = null) {
+    async insertElement(html, position = null, options = {}) {
         const defaultPosition = {
             gridRow: '4/18',
             gridColumn: '2/32'
         };
 
-        const elementId = 'el_' + Date.now();
+        const elementId = options.elementId || 'el_' + Date.now();
+        const useAutoPosition = options.useAutoPosition === true;
+
+        let finalPosition = position || defaultPosition;
+
+        // If auto-position enabled, get position from backend
+        if (useAutoPosition && options.positionWidth && options.positionHeight) {
+            const autoPos = await this.getAutoPosition(
+                elementId,
+                options.elementType || 'TEXT_BOX',
+                options.positionWidth,
+                options.positionHeight
+            );
+            finalPosition = {
+                gridRow: autoPos.gridRow,
+                gridColumn: autoPos.gridColumn
+            };
+        }
 
         this.sendCommand('insertTextBox', {
             elementId: elementId,
             slideIndex: 0,
             content: html,
-            gridRow: position?.gridRow || defaultPosition.gridRow,
-            gridColumn: position?.gridColumn || defaultPosition.gridColumn,
-            skipAutoSize: !!position,  // Skip auto-sizing when position explicitly provided
+            gridRow: finalPosition.gridRow,
+            gridColumn: finalPosition.gridColumn,
+            positionWidth: options.positionWidth,
+            positionHeight: options.positionHeight,
+            skipAutoSize: true,  // Position already calculated by backend
             draggable: true,
             resizable: true
         });
+
+        console.log('[Canvas] insertElement with useAutoPosition:', useAutoPosition,
+                    'position:', finalPosition.gridRow, finalPosition.gridColumn);
 
         // Track locally
         this.elements.push({
             id: elementId,
             html: html,
-            position: position || defaultPosition
+            position: finalPosition
         });
 
         this.updateElementCount();
@@ -163,36 +249,85 @@ class CanvasRenderer {
     }
 
     /**
+     * Extract body content from complete HTML document
+     * Backend wraps chart HTML in <!DOCTYPE html><html>... for iframe srcdoc
+     * For direct innerHTML injection, we need just the body content
+     * v7.5.17: Strip HTML wrapper for insertChart compatibility
+     * @param {string} html - Potentially complete HTML document
+     * @returns {string} - Extracted body content with scripts preserved
+     */
+    _extractBodyContent(html) {
+        // If it's a complete HTML document, extract body content
+        if (html.includes('<!DOCTYPE') || html.includes('<html')) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+
+            // Get all scripts from head (Chart.js CDN, ApexCharts, etc.)
+            const headScripts = Array.from(doc.head.querySelectorAll('script'));
+
+            // Get body content
+            const bodyContent = doc.body.innerHTML;
+
+            // Reconstruct: scripts first, then body content
+            const scriptTags = headScripts.map(s => s.outerHTML).join('\n');
+            const result = scriptTags + '\n' + bodyContent;
+
+            console.log('[Canvas] Extracted body content from HTML document');
+            return result;
+        }
+        return html;
+    }
+
+    /**
      * Insert chart element using Layout Service's insertChart command
+     * Uses backend auto-positioning when useAutoPosition is true.
      * v7.5.16: Use insertChart (not insertTextBox) for proper drag handling
-     * - No iframe wrapping - Layout Service handles script execution
-     * - Gets .inserted-chart class with proper drag handling
-     * - Canvas pointer-events managed during drag
+     * v7.5.17: Strip HTML document wrapper before sending
+     * v7.5.24: Backend auto-positioning via occupancy tracker
      *
      * @param {string} html - Chart HTML from analytics service
      * @param {object} position - Grid position (optional)
      * @param {string} elementId - Optional element ID for persistence
+     * @param {object} options - Additional options including useAutoPosition
+     * @returns {Promise<string>} - Element ID
      */
-    insertChart(html, position = null, elementId = null) {
-        // Charts get a larger default area
+    async insertChart(html, position = null, elementId = null, options = {}) {
+        // Charts default to 16×12 grids (4:3 ratio) at content safe zone
         const defaultPosition = {
-            gridRow: '3/19',
-            gridColumn: '2/32'
+            gridRow: '4/16',      // Row 4 to 16 = 12 rows
+            gridColumn: '2/18'    // Col 2 to 18 = 16 cols
         };
 
         // Use provided elementId or generate one
         const id = elementId || ('chart_' + Date.now());
 
-        // v7.5.16: Use insertChart command for proper chart handling
-        // - No iframe wrapping - Layout Service handles script execution
-        // - Gets .inserted-chart class with proper drag handling
-        // - Canvas pointer-events managed during drag
+        // Extract body content from HTML document wrapper
+        const cleanHtml = this._extractBodyContent(html);
+
+        const useAutoPosition = options.useAutoPosition === true;
+        const width = options.positionWidth || 14;
+        const height = options.positionHeight || 10;
+
+        let finalPosition = position || defaultPosition;
+
+        // If auto-position enabled, get position from backend
+        if (useAutoPosition) {
+            const autoPos = await this.getAutoPosition(id, 'CHART', width, height);
+            finalPosition = {
+                gridRow: autoPos.gridRow,
+                gridColumn: autoPos.gridColumn
+            };
+        }
+
+        // Use insertChart command for proper chart handling
         this.sendCommand('insertChart', {
             id: id,
             slideIndex: 0,
-            chartHtml: html,  // Raw HTML, not iframe-wrapped
-            gridRow: position?.gridRow || defaultPosition.gridRow,
-            gridColumn: position?.gridColumn || defaultPosition.gridColumn,
+            chartHtml: cleanHtml,
+            gridRow: finalPosition.gridRow,
+            gridColumn: finalPosition.gridColumn,
+            positionWidth: width,
+            positionHeight: height,
             draggable: true,
             resizable: true
         });
@@ -202,23 +337,28 @@ class CanvasRenderer {
             id: id,
             type: 'chart',
             html: html,
-            position: position || defaultPosition
+            position: finalPosition
         });
 
         this.updateElementCount();
         this.hidePlaceholder();
 
-        console.log('[Canvas] Chart inserted via insertChart command:', id);
+        console.log('[Canvas] Chart inserted with useAutoPosition:', useAutoPosition,
+                    'position:', finalPosition.gridRow, finalPosition.gridColumn);
         return id;
     }
 
     /**
      * Insert image element
+     * Uses backend auto-positioning when useAutoPosition is true.
+     * v7.5.24: Backend auto-positioning via occupancy tracker
      * @param {string} html - HTML content with image
      * @param {object} position - Grid position (optional) with grid_row and grid_column
      * @param {string} elementId - Optional element ID from backend
+     * @param {object} options - Additional options including useAutoPosition
+     * @returns {Promise<string>} - Element ID
      */
-    insertImage(html, position = null, elementId = null) {
+    async insertImage(html, position = null, elementId = null, options = {}) {
         // Default full content area
         const defaultPosition = {
             gridRow: '4/18',
@@ -228,20 +368,36 @@ class CanvasRenderer {
         // Use provided elementId or generate one
         const id = elementId || ('img_' + Date.now());
 
+        const useAutoPosition = options.useAutoPosition === true;
+        const width = options.positionWidth || 14;
+        const height = options.positionHeight || 10;
+
         // Convert backend position format (grid_row/grid_column) to frontend format (gridRow/gridColumn)
-        const gridPosition = {
+        let finalPosition = {
             gridRow: position?.grid_row || position?.gridRow || defaultPosition.gridRow,
             gridColumn: position?.grid_column || position?.gridColumn || defaultPosition.gridColumn
         };
 
-        // Use insertTextBox - Layout Service renders the image HTML
-        this.sendCommand('insertTextBox', {
-            elementId: id,
+        // If auto-position enabled, get position from backend
+        if (useAutoPosition) {
+            const autoPos = await this.getAutoPosition(id, 'IMAGE', width, height);
+            finalPosition = {
+                gridRow: autoPos.gridRow,
+                gridColumn: autoPos.gridColumn
+            };
+        }
+
+        // Use insertImage - Layout Service handles image rendering
+        this.sendCommand('insertImage', {
+            id: id,
             slideIndex: 0,
-            content: html,
-            gridRow: gridPosition.gridRow,
-            gridColumn: gridPosition.gridColumn,
-            skipAutoSize: !!position,  // Skip auto-sizing when position explicitly provided
+            imageUrl: null,  // Using HTML content instead
+            imageHtml: html,
+            gridRow: finalPosition.gridRow,
+            gridColumn: finalPosition.gridColumn,
+            positionWidth: width,
+            positionHeight: height,
+            skipAutoSize: true,  // Position already calculated by backend
             draggable: true,
             resizable: true
         });
@@ -251,13 +407,91 @@ class CanvasRenderer {
             id: id,
             type: 'image',
             html: html,
-            position: gridPosition
+            position: finalPosition
         });
 
         this.updateElementCount();
         this.hidePlaceholder();
 
-        console.log('[Canvas] Image inserted:', id);
+        console.log('[Canvas] Image inserted with useAutoPosition:', useAutoPosition,
+                    'position:', finalPosition.gridRow, finalPosition.gridColumn);
+        return id;
+    }
+
+    /**
+     * Insert diagram element (via Diagram Generator v3.0)
+     * Uses backend auto-positioning when useAutoPosition is true.
+     * @param {string} html - Diagram HTML content
+     * @param {object} position - Grid position (optional) with grid_row and grid_column
+     * @param {string} elementId - Optional element ID from backend
+     * @param {object} options - Additional options including useAutoPosition, diagramType
+     * @returns {Promise<string>} - Element ID
+     */
+    async insertDiagram(html, position = null, elementId = null, options = {}) {
+        // Default full content area for diagrams
+        const defaultPosition = {
+            gridRow: '4/18',
+            gridColumn: '2/32'
+        };
+
+        // Use provided elementId or generate one
+        const id = elementId || ('diagram_' + Date.now());
+
+        // Extract body content from HTML document wrapper
+        const cleanHtml = this._extractBodyContent(html);
+
+        const useAutoPosition = options.useAutoPosition === true;
+        const width = options.positionWidth || 30;
+        const height = options.positionHeight || 14;
+        const diagramType = options.diagramType || 'DIAGRAM';
+
+        // Convert backend position format to frontend format
+        let finalPosition = {
+            gridRow: position?.grid_row || position?.gridRow || defaultPosition.gridRow,
+            gridColumn: position?.grid_column || position?.gridColumn || defaultPosition.gridColumn
+        };
+
+        // If auto-position enabled, get position from backend
+        if (useAutoPosition) {
+            const autoPos = await this.getAutoPosition(id, diagramType, width, height);
+            finalPosition = {
+                gridRow: autoPos.gridRow,
+                gridColumn: autoPos.gridColumn
+            };
+        }
+
+        // Use insertDiagram command for Layout Service (uses "diagram" element type)
+        this.sendCommand('insertDiagram', {
+            id: id,
+            slideIndex: 0,
+            diagramHtml: cleanHtml,
+            gridRow: finalPosition.gridRow,
+            gridColumn: finalPosition.gridColumn,
+            positionWidth: width,
+            positionHeight: height,
+            draggable: true,
+            resizable: true
+        });
+
+        // Force iframe to reload the presentation from Layout Service
+        // The diagram was already added by the backend, so reload shows it immediately
+        this.sendCommand('reloadPresentation', {});
+
+        // Track locally with type indicator
+        this.elements.push({
+            id: id,
+            type: 'diagram',
+            diagramType: diagramType,
+            html: html,
+            position: finalPosition
+        });
+
+        this.updateElementCount();
+        this.hidePlaceholder();
+
+        console.log('[Canvas] Diagram inserted:', diagramType,
+                    'useAutoPosition:', useAutoPosition,
+                    'position:', finalPosition.gridRow, finalPosition.gridColumn);
         return id;
     }
 
@@ -281,6 +515,7 @@ class CanvasRenderer {
 
     /**
      * Delete an element
+     * Notifies backend to free grid cells.
      * @param {string} elementId - Element ID
      */
     deleteElement(elementId) {
@@ -291,6 +526,9 @@ class CanvasRenderer {
         // Remove from local tracking
         this.elements = this.elements.filter(e => e.id !== elementId);
         this.updateElementCount();
+
+        // Notify backend to free grid cells
+        this.notifyElementRemoved(elementId);
     }
 
     /**
@@ -345,8 +583,9 @@ class CanvasRenderer {
 
     /**
      * Clear all elements from canvas
+     * Also clears backend occupancy tracking.
      */
-    clearElements() {
+    async clearElements() {
         // Delete all tracked elements
         this.elements.forEach(element => {
             this.sendCommand('deleteElement', { elementId: element.id });
@@ -354,6 +593,15 @@ class CanvasRenderer {
 
         this.elements = [];
         this.updateElementCount();
+
+        // Clear backend occupancy tracking
+        const sessionId = window.sessionManager?.getSessionId?.() || 'default';
+        try {
+            await fetch(`/api/position/${sessionId}/clear`, { method: 'DELETE' });
+            console.log('[Canvas] Backend occupancy cleared');
+        } catch (error) {
+            console.warn('[Canvas] Failed to clear backend occupancy:', error);
+        }
 
         // Reload presentation to fully reset
         this.sendCommand('reloadPresentation', {});
